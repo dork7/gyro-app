@@ -5,7 +5,7 @@ Four small games that run in the browser on your laptop and use **your phone's m
 | # | Game | How you play |
 |---|---|---|
 | 1 | 🍉 **Fruit Slicer** | Swing the phone like a sword; the gyroscope moves the blade |
-| 2 | 🏎️ **Gyro Racer** | Roll the phone like a steering wheel; GAS and BRAKE buttons on the phone |
+| 2 | 🏎️ **Gyro Racer** | Roll the phone like a steering wheel; tap GAS on the phone to go (tap again to lift off), hold BRAKE |
 | 3 | 🦘 **Jump Run** | Really jump. The accelerometer detects it and the runner jumps over obstacles |
 | 4 | 🧘 **Yoga Flow** | Phone against your chest, move through five poses and hold them still |
 
@@ -14,12 +14,29 @@ phone (/pad page)  ──WebSocket──▶  Node server (rooms)  ──WebSocke
  gyro + accelerometer              pairs by room code                    rendering, physics, scoring
 ```
 
-## Run it
+## Set up and run
 
-Needs Node 18+ on the laptop.
+On any Mac, Linux machine, Raspberry Pi or WSL, one script does everything:
 
 ```bash
 cd gyro-fruit-slicer
+bash setup.sh            # installs Node.js if missing, installs dependencies, checks and builds
+bash setup.sh --start    # same, then starts the server
+bash setup.sh --service  # same, and installs a service that starts at boot (Linux/systemd, good for a Pi)
+```
+
+On a machine that has nothing yet, once the code is on GitHub (public repo `dork7/gyro-app`), one line downloads the project into `~/gyro-app` and sets it up:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dork7/gyro-app/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dork7/gyro-app/main/setup.sh | bash -s -- --start   # and start it
+```
+
+`--skip-tests` makes it faster on a slow machine. It is safe to run again. Node.js is installed with Homebrew (macOS), NodeSource (Debian/Ubuntu/Raspberry Pi OS), dnf or pacman, or nvm as a fallback. On Windows, use WSL.
+
+Or by hand (Node 18+):
+
+```bash
 npm install
 npm run dev
 ```
@@ -55,7 +72,7 @@ Click the laptop page once to enable sound.
 
 **Fruit Slicer.** Hold the phone like a sword, top edge pointing at the screen, press **Centre**, then slice the watermelon to start. Without a phone, a fast mouse works as the blade.
 
-**Gyro Racer.** Hold the phone upright like a wheel, press **Centre**, hold **GAS**. Arrow keys also work on the laptop.
+**Gyro Racer.** Hold the phone upright like a wheel, press **Centre**, tap **GAS** once to keep the pedal down and tap it again to lift off. **BRAKE** is held, and it also releases GAS. On the laptop, `↑` / `W` is gas. Arrow keys also work on the laptop.
 
 **Jump Run.** Hold the phone in your hand or keep it in a pocket and jump. The phone page shows a live **jump meter**: a jump must push the bar past the white line. Raise the sensitivity if it misses jumps; lower it if it fires when you walk. Jumping starts the game and restarts it after a game over. The JUMP button, `Space` and `↑` also work (for testing). Collect coins; you have three lives.
 
