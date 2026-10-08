@@ -6,6 +6,10 @@
 #   bash setup.sh --service    ...and install it as a service that starts at boot (Linux, systemd; good for a Raspberry Pi)
 #   bash setup.sh --skip-tests skip the unit tests (faster on a Raspberry Pi)
 #
+# Without downloading the project first (it is cloned into ~/gyro-app, or $GYRO_DIR):
+#   curl -fsSL https://raw.githubusercontent.com/dork7/gyro-app/main/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/dork7/gyro-app/main/setup.sh | bash -s -- --service
+#
 # Safe to run again at any time.
 
 set -euo pipefail
@@ -23,7 +27,7 @@ for arg in "$@"; do
     --service) SERVICE=1 ;;
     --skip-tests) TESTS=0 ;;
     -h | --help)
-      sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -33,21 +37,49 @@ for arg in "$@"; do
   esac
 done
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
-ROOT="$(pwd)"
-
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=''; G=''; Y=''; R=''; N=''; fi
 step() { printf '\n%s==>%s %s%s%s\n' "$G" "$N" "$B" "$*" "$N"; }
 warn() { printf '%s!%s %s\n' "$Y" "$N" "$*"; }
 die() { printf '%sError:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-if [ ! -f package.json ]; then die "package.json not found. Run this script from the project folder."; fi
-
 SUDO=''
 if [ "$(id -u)" -ne 0 ]; then
   if have sudo; then SUDO='sudo'; fi
 fi
+
+# ---------------------------------------------------------------- piped install (curl ... | bash)
+# When piped there is no script file and no project folder, so download the project and run its copy.
+SELF="${BASH_SOURCE[0]:-}"
+if [ -z "$SELF" ] || [ ! -f "$SELF" ]; then
+  REPO_URL="${GYRO_REPO:-https://github.com/dork7/gyro-app.git}"
+  DIR="${GYRO_DIR:-$HOME/gyro-app}"
+  step "Downloading Gyro Arcade into $DIR"
+  if ! have git; then
+    warn "git is not installed, installing it."
+    if have apt-get; then
+      { $SUDO apt-get update -y && $SUDO apt-get install -y git ca-certificates; } </dev/null
+    elif have dnf; then
+      $SUDO dnf install -y git </dev/null
+    elif have pacman; then
+      $SUDO pacman -S --noconfirm git </dev/null
+    fi
+    have git || die "Could not install git. Install it and run this command again."
+  fi
+  if [ -d "$DIR/.git" ]; then
+    git -C "$DIR" pull --ff-only </dev/null || warn "Could not update $DIR, using the copy that is already there."
+  elif [ -e "$DIR" ]; then
+    die "$DIR already exists and is not a copy of the project. Move it away, or set GYRO_DIR to another folder."
+  else
+    git clone --depth 1 "$REPO_URL" "$DIR" </dev/null
+  fi
+  exec bash "$DIR/setup.sh" "$@" </dev/null
+fi
+
+cd "$(dirname "$SELF")"
+ROOT="$(pwd)"
+
+if [ ! -f package.json ]; then die "package.json not found. Run this script from the project folder."; fi
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
