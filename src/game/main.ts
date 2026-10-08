@@ -6,6 +6,7 @@ import { CarGame } from './car';
 import { Game } from './game';
 import { JumpGame } from './jump';
 import { YogaGame } from './yoga';
+import { WriteGame } from './write';
 import { HostConnection } from './net';
 import type { GameHooks, Scene } from './scene';
 
@@ -29,6 +30,7 @@ const fruit = new Game(canvas, sfx, hooks);
 const car = new CarGame(canvas, sfx, hooks);
 const jump = new JumpGame(canvas, sfx, hooks);
 const yoga = new YogaGame(canvas, sfx, hooks);
+const write = new WriteGame(canvas, sfx, hooks);
 
 // ---------------------------------------------------------------- which game is showing
 let mode: GameId = 'home';
@@ -40,7 +42,7 @@ function setMode(next: GameId): void {
   resetMenuUi();
   mode = next;
   document.body.dataset.mode = next;
-  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : null;
+  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : null;
   $('home').hidden = next !== 'home';
   $('title').querySelector('h1')!.textContent = scene?.title ?? 'Gyro Arcade';
   $('title').querySelector('p')!.textContent = scene?.subtitle ?? 'Pick a game. Your phone is the controller.';
@@ -142,6 +144,9 @@ const net: HostConnection = new HostConnection({
     if (mode === 'fruit' && !menuOpen) {
       const p = mapper.map(latest, fruit.w, fruit.h, sens);
       fruit.pointerMove(p.x, p.y, now);
+    } else if (mode === 'write' && !menuOpen) {
+      const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
+      write.penMove(p.x + write.shiftX, p.y, now);
     }
   },
   onButton(name) {
@@ -165,7 +170,7 @@ const net: HostConnection = new HostConnection({
   onSelect(game) {
     sfx.unlock();
     if (game === 'home') openMenu();
-    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga') choose(game);
+    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write') choose(game);
   },
   onJump(strength) {
     sfx.unlock();
@@ -195,9 +200,10 @@ async function renderQr(room: string): Promise<void> {
 
 // ---------------------------------------------------------------- mouse and keyboard
 window.addEventListener('pointermove', (e) => {
-  if (mode !== 'fruit' || menuOpen) return;
+  if ((mode !== 'fruit' && mode !== 'write') || menuOpen) return;
   if (performance.now() - lastPadSample < 1500) return; // phone wins while it is streaming
-  fruit.pointerMove(e.clientX, e.clientY, performance.now());
+  if (mode === 'write') write.penMove(e.clientX, e.clientY, performance.now());
+  else fruit.pointerMove(e.clientX, e.clientY, performance.now());
 });
 window.addEventListener('pointerdown', () => sfx.unlock());
 window.addEventListener('keydown', (e) => {
@@ -215,6 +221,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit2') choose('car');
   else if (e.code === 'Digit3') choose('jump');
   else if (e.code === 'Digit4') choose('yoga');
+  else if (e.code === 'Digit5') choose('write');
   else if (e.code === 'KeyH') toggleMenu();
   else if (e.code === 'Escape' && menuOpen) closeMenu();
   else if (menuOpen) {
@@ -283,6 +290,6 @@ function loop(t: number): void {
 requestAnimationFrame(loop);
 
 // Handy for debugging from the browser console (and used by the automated test).
-Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
+Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
 
 setMode('home');

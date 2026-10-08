@@ -15,7 +15,7 @@ export interface SampleMsg {
 export type PadButton = 'center' | 'start' | 'pause';
 
 /** Which screen the laptop is showing. */
-export type GameId = 'home' | 'fruit' | 'car' | 'jump' | 'yoga';
+export type GameId = 'home' | 'fruit' | 'car' | 'jump' | 'yoga' | 'write';
 
 // ---- first message from each side -------------------------------------------------
 export interface HostMsg {

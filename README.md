@@ -1,5 +1,20 @@
 # Gyro Arcade
 
+## Quick install (any Mac, Linux machine or Raspberry Pi)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dork7/gyro-app/main/setup.sh | bash
+```
+
+To start the server right after setup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dork7/gyro-app/main/setup.sh | bash -s -- --start
+```
+
+This downloads the project into `~/gyro-app`, installs Node.js if it is missing, installs the dependencies, runs the checks and builds. On Windows, run it inside WSL. More options are in [Set up and run](#set-up-and-run).
+
+
 Four small games that run in the browser on your laptop and use **your phone's motion sensors as the controller**.
 
 | # | Game | How you play |

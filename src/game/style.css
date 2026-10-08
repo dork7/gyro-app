@@ -120,12 +120,12 @@ body[data-state='playing'] #menuBtn {
 }
 .cards {
   display: flex;
-  gap: 28px;
+  gap: 20px;
   flex-wrap: wrap;
   justify-content: center;
 }
 .card {
-  width: 250px;
+  width: 224px;
   padding: 26px 20px 22px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 24px;
@@ -299,6 +299,7 @@ body[data-state='home'] {
 body[data-mode='fruit'] #pair li[data-for='fruit'],
 body[data-mode='car'] #pair li[data-for='car'],
 body[data-mode='yoga'] #pair li[data-for='yoga'],
+body[data-mode='write'] #pair li[data-for='write'],
 body[data-mode='jump'] #pair li[data-for='jump'] {
   display: list-item;
 }

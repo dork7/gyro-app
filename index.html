@@ -32,6 +32,11 @@
           <b>Yoga Flow</b>
           <small>Hold the phone to your chest, hold the pose<br />key 4</small>
         </button>
+        <button class="card" data-game="write">
+          <span class="icon">✏️</span>
+          <b>Number Writing</b>
+          <small>Trace the digits with the phone as a pen<br />key 5</small>
+        </button>
       </div>
       <button id="resumeBtn" hidden>▶ Resume current game <small>Esc</small></button>
     </section>
@@ -52,10 +57,11 @@
         <ol>
           <li>Scan the QR code with your phone</li>
           <li>Tap <b>Enable motion</b> and accept the certificate warning once</li>
-          <li>Pick a game here (keys 1–4, <b>H</b> or the <b>☰ Menu</b> button) or on the phone (<b>☰ Choose game</b>)</li>
+          <li>Pick a game here (keys 1–5, <b>H</b> or the <b>☰ Menu</b> button) or on the phone (<b>☰ Choose game</b>)</li>
           <li data-for="fruit"><b>Fruit Slicer:</b> hold the phone like a sword, top edge pointing at this screen, press <b>Centre</b></li>
-          <li data-for="car"><b>Racer:</b> hold the phone like a steering wheel, press <b>Centre</b>, then <b>GAS</b></li>
+          <li data-for="car"><b>Racer:</b> hold the phone like a steering wheel, press <b>Centre</b>, then tap <b>GAS</b> (tap again to lift off)</li>
           <li data-for="yoga"><b>Yoga Flow:</b> phone against your chest with both hands, stand tall, press <b>Start</b>, follow the poses</li>
+          <li data-for="write"><b>Number Writing:</b> hold the phone like a pen, point it at the screen, press <b>Centre</b>, then <b>Start</b> and trace the digit</li>
           <li data-for="jump"><b>Jump Run:</b> hold the phone (or keep it in a pocket) and jump to start and to hop over things</li>
         </ol>
         <small id="url"></small>

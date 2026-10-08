@@ -62,10 +62,14 @@ function connect(): void {
         joined = true;
         gameOn = Boolean(m.gameOn);
         send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
+        sendPedals();
         break;
       case 'game':
         gameOn = Boolean(m.on);
-        if (gameOn) send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
+        if (gameOn) {
+          send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
+          sendPedals();
+        }
         break;
       case 'error':
         joined = false;
@@ -183,20 +187,22 @@ function renderInfo(): void {
   $('jumpCtl').hidden = game !== 'jump';
   $('homeBtn').hidden = home || $('controls').hidden;
   $('gamesBtn').hidden = home || $('controls').hidden;
-  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : 'Centre';
+  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : 'Centre';
 
   const ready =
     game === 'car'
-      ? 'Hold GAS to go, roll the phone like a wheel'
+      ? 'Tap GAS to go (tap again to stop), roll the phone like a wheel'
       : game === 'jump'
         ? 'Jump to start (or tap JUMP)'
         : game === 'yoga'
           ? 'Hold the phone to your chest, stand tall, press Start'
-          : 'Slice the watermelon or press Start';
+          : game === 'write'
+            ? 'Hold the phone like a pen, point at the screen, Centre pen, then Start'
+            : 'Slice the watermelon or press Start';
   const lines = home
     ? ['Choose a game (or pick the current one to resume)']
     : gameState === 'playing'
-      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : 'Lives'} ${info.lives}`]
+      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : 'Lives'} ${info.lives}`]
       : gameState === 'over'
         ? [`Game over: ${info.score}  (best ${info.best})`]
         : gameState === 'paused'
@@ -204,8 +210,8 @@ function renderInfo(): void {
           : [ready];
   $('info').textContent = lines.join('\n');
   $('pauseBtn').textContent = gameState === 'paused' ? 'Resume' : 'Pause';
-  $('startBtn').textContent = gameState === 'over' ? 'Play again' : 'Start';
-  if (home || game !== 'car') releasePedals();
+  $('startBtn').textContent = gameState === 'over' ? 'Play again' : game === 'write' && gameState === 'playing' ? 'Skip digit' : 'Start';
+  if (home || game !== 'car' || gameState === 'over') releasePedals();
 }
 
 function sendPedals(): void {
@@ -219,22 +225,29 @@ function releasePedals(): void {
   $('gasBtn').classList.remove('down');
   $('brakeBtn').classList.remove('down');
 }
+/** BRAKE is held. GAS is a toggle: tap once to keep going, tap again (or hit BRAKE) to lift off. */
+function setPedal(key: 'gas' | 'brake', on: boolean): void {
+  if (pedals[key] === on) return;
+  pedals[key] = on;
+  $(key === 'gas' ? 'gasBtn' : 'brakeBtn').classList.toggle('down', on);
+  sendPedals();
+}
 function bindPedal(el: HTMLElement, key: 'gas' | 'brake'): void {
-  const set = (down: boolean) => {
-    if (pedals[key] === down) return;
-    pedals[key] = down;
-    el.classList.toggle('down', down);
-    sendPedals();
-  };
   el.addEventListener('pointerdown', (e) => {
-    el.setPointerCapture(e.pointerId);
-    set(true);
-    if (down(key) && 'vibrate' in navigator) navigator.vibrate(8);
+    if (key === 'gas') {
+      setPedal('gas', !pedals.gas);
+    } else {
+      el.setPointerCapture(e.pointerId);
+      setPedal('gas', false);
+      setPedal('brake', true);
+    }
+    if ('vibrate' in navigator) navigator.vibrate(8);
   });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ev, () => set(false));
+  if (key === 'brake') {
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ev, () => setPedal('brake', false));
+  }
   el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
-const down = (k: 'gas' | 'brake') => pedals[k];
 bindPedal($('gasBtn'), 'gas');
 bindPedal($('brakeBtn'), 'brake');
 
