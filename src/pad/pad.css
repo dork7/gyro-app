@@ -1,0 +1,244 @@
+:root {
+  color-scheme: dark;
+  --bg: #120b1c;
+  --fg: #fff;
+  --muted: rgba(255, 255, 255, 0.65);
+  --accent: #78dcff;
+  --ok: #7be495;
+  --bad: #ff7b7b;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior: none;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100dvh;
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+}
+.chip[data-on='true'] {
+  background: rgba(123, 228, 149, 0.2);
+  color: var(--ok);
+}
+.chip[data-on='error'] {
+  background: rgba(255, 123, 123, 0.2);
+  color: var(--bad);
+}
+
+section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+[hidden] {
+  display: none !important;
+}
+
+p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.error {
+  color: var(--bad);
+}
+
+button {
+  font: inherit;
+  color: var(--fg);
+  border: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 18px;
+}
+button:active {
+  filter: brightness(1.4);
+}
+button.big {
+  font-size: 22px;
+  font-weight: 800;
+}
+button.primary {
+  background: linear-gradient(135deg, #ff9f1c, #ff4d6d);
+}
+#centerBtn {
+  min-height: 38vh;
+  font-size: 34px;
+}
+body[data-game='car'] #centerBtn {
+  min-height: 0;
+  font-size: 20px;
+  padding: 12px;
+}
+#gameCtl,
+#homeCtl {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+button.small {
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+/* Gas and brake: big hold-down pads for the thumbs */
+.pedals {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 12px;
+}
+.pedal {
+  min-height: 34vh;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+.pedal.brake {
+  background: rgba(255, 93, 93, 0.22);
+  border: 2px solid rgba(255, 93, 93, 0.6);
+}
+.pedal.gas {
+  background: rgba(123, 228, 149, 0.22);
+  border: 2px solid rgba(123, 228, 149, 0.6);
+}
+.pedal.down {
+  filter: brightness(1.8);
+  transform: scale(0.98);
+}
+@media (orientation: landscape) {
+  main {
+    gap: 10px;
+  }
+  .pedal {
+    min-height: 46vh;
+  }
+}
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+input[type='range'] {
+  width: 100%;
+  accent-color: #ff4d6d;
+}
+#manual {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+#roomInput {
+  font: 800 32px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.3em;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+}
+.info {
+  font: 13px/1.5 ui-monospace, Menlo, monospace;
+  color: var(--accent);
+  min-height: 3em;
+}
+
+/* Jump Run: live meter + tap fallback */
+#jumpCtl {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#meter {
+  position: relative;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+#meterBar {
+  height: 100%;
+  width: 0;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #78dcff, #7be495);
+}
+#meterBar.hot {
+  background: linear-gradient(90deg, #ffd23f, #ff4d6d);
+}
+#meterThr {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #fff;
+  opacity: 0.85;
+}
+#meterLabel {
+  font-size: 13px;
+  color: var(--muted);
+}
+#jumpBtn {
+  min-height: 30vh;
+  font-size: 34px;
+  touch-action: manipulation;
+}
+body[data-game='jump'] #centerBtn {
+  display: none;
+}

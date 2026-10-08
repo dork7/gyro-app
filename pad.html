@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#120b1c" />
+    <title>Gyro Arcade – Controller</title>
+    <link rel="stylesheet" href="/src/pad/pad.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Gyro Arcade</h1>
+        <div class="right">
+          <button id="homeBtn" class="small" hidden>☰ Menu</button>
+          <div id="status" class="chip" data-on="false">Connecting…</div>
+        </div>
+      </header>
+
+      <!-- Step 1: needs a tap so iOS will ask for motion permission -->
+      <section id="enable">
+        <p id="hint">Pick a game on the laptop or here, then follow the grip shown for it. Your phone is the controller.</p>
+        <form id="manual" hidden>
+          <label for="roomInput">Room code shown on the laptop</label>
+          <input id="roomInput" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" />
+        </form>
+        <button id="enableBtn" class="big primary">Enable motion</button>
+        <p id="error" class="error" hidden></p>
+      </section>
+
+      <!-- Step 2: the controller -->
+      <section id="controls" hidden>
+        <!-- game picker (laptop is on the home screen) -->
+        <div id="homeCtl" hidden>
+          <button class="big primary" data-game="fruit">🍉 Fruit Slicer</button>
+          <button class="big primary" data-game="car">🏎️ Gyro Racer</button>
+          <button class="big primary" data-game="jump">🦘 Jump Run</button>
+          <button class="big primary" data-game="yoga">🧘 Yoga Flow</button>
+          <p>Fruit Slicer: hold like a sword, top edge toward the screen.<br />Racer: hold like a steering wheel.<br />Jump Run: hold the phone and jump.<br />Yoga: phone against your chest, both hands.</p>
+        </div>
+
+        <!-- car pedals (held, one per thumb when the phone is a wheel) -->
+        <div id="carCtl" hidden>
+          <div class="pedals">
+            <button id="brakeBtn" class="pedal brake">BRAKE</button>
+            <button id="gasBtn" class="pedal gas">GAS</button>
+          </div>
+        </div>
+
+        <!-- jump: live accelerometer meter + a tap fallback -->
+        <div id="jumpCtl" hidden>
+          <div id="meter"><div id="meterBar"></div><div id="meterThr"></div></div>
+          <div id="meterLabel">Jump meter: the bar must pass the line</div>
+          <button id="jumpBtn" class="big primary">JUMP (tap)</button>
+        </div>
+
+        <div id="gameCtl" hidden>
+          <button id="centerBtn" class="big primary">Centre</button>
+          <div class="row">
+            <button id="startBtn" class="big">Start</button>
+            <button id="pauseBtn" class="big">Pause</button>
+          </div>
+          <label class="slider">
+            Sensitivity <span id="sensVal">1.0×</span>
+            <input id="sens" type="range" min="0.5" max="3" step="0.1" value="1" />
+          </label>
+        </div>
+        <button id="gamesBtn" class="big" hidden>☰ Choose game</button>
+        <div id="info" class="info"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/pad/main.ts"></script>
+  </body>
+</html>

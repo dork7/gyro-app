@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gyro Arcade</title>
+    <link rel="stylesheet" href="/src/game/style.css" />
+  </head>
+  <body data-state="menu">
+    <canvas id="stage"></canvas>
+
+    <section id="home">
+      <h2 id="menuTitle">Choose a game</h2>
+      <div class="cards">
+        <button class="card" data-game="fruit">
+          <span class="icon">🍉</span>
+          <b>Fruit Slicer</b>
+          <small>Swing the phone like a sword<br />key 1</small>
+        </button>
+        <button class="card" data-game="car">
+          <span class="icon">🏎️</span>
+          <b>Gyro Racer</b>
+          <small>Tilt the phone like a steering wheel<br />key 2</small>
+        </button>
+        <button class="card" data-game="jump">
+          <span class="icon">🦘</span>
+          <b>Jump Run</b>
+          <small>Really jump. The phone feels it<br />key 3</small>
+        </button>
+        <button class="card" data-game="yoga">
+          <span class="icon">🧘</span>
+          <b>Yoga Flow</b>
+          <small>Hold the phone to your chest, hold the pose<br />key 4</small>
+        </button>
+      </div>
+      <button id="resumeBtn" hidden>▶ Resume current game <small>Esc</small></button>
+    </section>
+
+    <button id="menuBtn" title="Choose another game (H)">☰ Menu <small>H</small></button>
+
+    <header id="title">
+      <h1>Gyro Arcade</h1>
+      <p>Pick a game. Your phone is the controller.</p>
+    </header>
+
+    <aside id="pair">
+      <canvas id="qr" width="180" height="180"></canvas>
+      <div class="meta">
+        <div class="label">Room code</div>
+        <div class="code" id="code">····</div>
+        <div class="chip" id="padstatus" data-on="false">Waiting for phone…</div>
+        <ol>
+          <li>Scan the QR code with your phone</li>
+          <li>Tap <b>Enable motion</b> and accept the certificate warning once</li>
+          <li>Pick a game here (keys 1–4, <b>H</b> or the <b>☰ Menu</b> button) or on the phone (<b>☰ Choose game</b>)</li>
+          <li data-for="fruit"><b>Fruit Slicer:</b> hold the phone like a sword, top edge pointing at this screen, press <b>Centre</b></li>
+          <li data-for="car"><b>Racer:</b> hold the phone like a steering wheel, press <b>Centre</b>, then <b>GAS</b></li>
+          <li data-for="yoga"><b>Yoga Flow:</b> phone against your chest with both hands, stand tall, press <b>Start</b>, follow the poses</li>
+          <li data-for="jump"><b>Jump Run:</b> hold the phone (or keep it in a pocket) and jump to start and to hop over things</li>
+        </ol>
+        <small id="url"></small>
+        <small id="sound">Click anywhere once to enable sound. No phone? Move the mouse fast.</small>
+      </div>
+    </aside>
+
+    <div id="toast" hidden></div>
+    <pre id="debug" hidden></pre>
+
+    <script type="module" src="/src/game/main.ts"></script>
+  </body>
+</html>

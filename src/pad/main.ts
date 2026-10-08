@@ -1,0 +1,332 @@
+import { JumpDetector, spikeThreshold } from '../shared/jump';
+import type { GameId, GameState, PadButton } from '../shared/protocol';
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+const params = new URLSearchParams(location.search);
+let room = (params.get('room') ?? '').toUpperCase();
+
+let ws: WebSocket | null = null;
+let joined = false;
+let gameOn = false;
+let sensing = false;
+let retry = 400;
+let lastEvent = 0;
+let sent = 0;
+let gameState: GameState = 'menu';
+let game: GameId = 'home';
+const pedals = { gas: false, brake: false };
+const detector = new JumpDetector();
+let lastMotion = 0;
+let meterPeak = 0;
+let info = { score: 0, lives: 3, best: 0 };
+
+// ---------------------------------------------------------------- status UI
+function setStatus(text: string, kind: 'true' | 'false' | 'error'): void {
+  const el = $('status');
+  el.textContent = text;
+  el.dataset.on = kind;
+}
+function showError(msg: string): void {
+  const e = $('error');
+  e.textContent = msg;
+  e.hidden = false;
+}
+function refreshStatus(): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) setStatus('Connecting…', 'false');
+  else if (!joined) setStatus('Joining…', 'false');
+  else if (!gameOn) setStatus('Laptop game not open', 'error');
+  else setStatus(`Connected · ${room}`, 'true');
+}
+
+// ---------------------------------------------------------------- connection
+function connect(): void {
+  if (!room) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const sock = new WebSocket(`${proto}://${location.host}/ws`);
+  ws = sock;
+  sock.onopen = () => {
+    retry = 400;
+    sock.send(JSON.stringify({ t: 'join', room }));
+    refreshStatus();
+  };
+  sock.onmessage = (ev) => {
+    let m: { t: string; [k: string]: unknown };
+    try {
+      m = JSON.parse(ev.data as string);
+    } catch {
+      return;
+    }
+    switch (m.t) {
+      case 'joined':
+        joined = true;
+        gameOn = Boolean(m.gameOn);
+        send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
+        break;
+      case 'game':
+        gameOn = Boolean(m.on);
+        if (gameOn) send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
+        break;
+      case 'error':
+        joined = false;
+        showError(String(m.msg));
+        break;
+      case 'ping':
+        send({ t: 'pong', id: m.id });
+        break;
+      case 'haptic':
+        if ('vibrate' in navigator) navigator.vibrate(Math.min(60, Number(m.ms) || 15));
+        break;
+      case 'state':
+        gameState = m.state as GameState;
+        game = (m.game as GameId) ?? 'fruit';
+        info = { score: Number(m.score), lives: Number(m.lives), best: Number(m.best) };
+        renderInfo();
+        break;
+    }
+    refreshStatus();
+  };
+  sock.onclose = () => {
+    joined = false;
+    refreshStatus();
+    setTimeout(connect, retry);
+    retry = Math.min(4000, retry * 2);
+  };
+}
+
+function send(m: Record<string, unknown>): void {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
+}
+
+// ---------------------------------------------------------------- sensors
+const round = (n: number) => Math.round(n * 100) / 100;
+
+function onOrientation(e: DeviceOrientationEvent): void {
+  if (e.alpha === null || e.beta === null) return;
+  lastEvent = performance.now();
+  if (!joined || !gameOn) return;
+  send({ t: 's', a: round(e.alpha), b: round(e.beta), g: round(e.gamma ?? 0) });
+  sent++;
+}
+
+/** Accelerometer: detects real jumps for Jump Run (runs on the phone, so only a tiny message is sent). */
+function onMotion(e: DeviceMotionEvent): void {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x === null || a.y === null || a.z === null) return;
+  const now = performance.now();
+  lastMotion = now;
+  const strength = detector.push(Math.hypot(a.x, a.y, a.z), now);
+  meterPeak = Math.max(meterPeak, detector.ratio);
+  if (strength !== null && game === 'jump' && joined && gameOn) {
+    send({ t: 'jump', r: round(strength) });
+    if ('vibrate' in navigator) navigator.vibrate(12);
+  }
+}
+
+async function enableMotion(): Promise<boolean> {
+  if (!window.isSecureContext) {
+    showError('Motion sensors need HTTPS. Open the https:// link from the laptop QR code.');
+    return false;
+  }
+  if (typeof DeviceOrientationEvent === 'undefined') {
+    showError('This browser has no motion sensor support.');
+    return false;
+  }
+  // iOS asks once for "Motion & Orientation"; ask for both sensors inside this tap.
+  const asks: Promise<string>[] = [];
+  for (const E of [DeviceOrientationEvent, typeof DeviceMotionEvent !== 'undefined' ? DeviceMotionEvent : undefined]) {
+    const req = (E as unknown as { requestPermission?: () => Promise<string> } | undefined)?.requestPermission;
+    if (typeof req === 'function') asks.push(req.call(E));
+  }
+  if (asks.length) {
+    try {
+      const res = await Promise.all(asks);
+      if (res.some((r) => r !== 'granted')) {
+        showError('Motion access was denied. On iPhone: Settings → Safari → Motion & Orientation Access, then reload this page.');
+        return false;
+      }
+    } catch {
+      showError('Could not ask for motion access. Reload the page and tap the button again.');
+      return false;
+    }
+  }
+  window.addEventListener('deviceorientation', onOrientation);
+  window.addEventListener('devicemotion', onMotion);
+  sensing = true;
+  // If nothing arrives soon, explain why.
+  setTimeout(() => {
+    if (sensing && performance.now() - lastEvent > 1500) {
+      $('info').textContent = 'No motion data yet. Check that the browser has motion access, and that Low Power Mode is off.';
+    }
+  }, 2000);
+  return true;
+}
+
+async function keepAwake(): Promise<void> {
+  try {
+    await (navigator as unknown as { wakeLock?: { request(t: string): Promise<unknown> } }).wakeLock?.request('screen');
+  } catch {
+    /* not supported or denied: fine */
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && sensing) void keepAwake();
+});
+
+// ---------------------------------------------------------------- UI wiring
+function renderInfo(): void {
+  document.body.dataset.game = game;
+  const home = game === 'home';
+  $('homeCtl').hidden = !home;
+  $('gameCtl').hidden = home;
+  $('carCtl').hidden = game !== 'car';
+  $('jumpCtl').hidden = game !== 'jump';
+  $('homeBtn').hidden = home || $('controls').hidden;
+  $('gamesBtn').hidden = home || $('controls').hidden;
+  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : 'Centre';
+
+  const ready =
+    game === 'car'
+      ? 'Hold GAS to go, roll the phone like a wheel'
+      : game === 'jump'
+        ? 'Jump to start (or tap JUMP)'
+        : game === 'yoga'
+          ? 'Hold the phone to your chest, stand tall, press Start'
+          : 'Slice the watermelon or press Start';
+  const lines = home
+    ? ['Choose a game (or pick the current one to resume)']
+    : gameState === 'playing'
+      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : 'Lives'} ${info.lives}`]
+      : gameState === 'over'
+        ? [`Game over: ${info.score}  (best ${info.best})`]
+        : gameState === 'paused'
+          ? ['Paused']
+          : [ready];
+  $('info').textContent = lines.join('\n');
+  $('pauseBtn').textContent = gameState === 'paused' ? 'Resume' : 'Pause';
+  $('startBtn').textContent = gameState === 'over' ? 'Play again' : 'Start';
+  if (home || game !== 'car') releasePedals();
+}
+
+function sendPedals(): void {
+  send({ t: 'pedal', gas: pedals.gas, brake: pedals.brake });
+}
+function releasePedals(): void {
+  if (!pedals.gas && !pedals.brake) return;
+  pedals.gas = false;
+  pedals.brake = false;
+  sendPedals();
+  $('gasBtn').classList.remove('down');
+  $('brakeBtn').classList.remove('down');
+}
+function bindPedal(el: HTMLElement, key: 'gas' | 'brake'): void {
+  const set = (down: boolean) => {
+    if (pedals[key] === down) return;
+    pedals[key] = down;
+    el.classList.toggle('down', down);
+    sendPedals();
+  };
+  el.addEventListener('pointerdown', (e) => {
+    el.setPointerCapture(e.pointerId);
+    set(true);
+    if (down(key) && 'vibrate' in navigator) navigator.vibrate(8);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ev, () => set(false));
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+const down = (k: 'gas' | 'brake') => pedals[k];
+bindPedal($('gasBtn'), 'gas');
+bindPedal($('brakeBtn'), 'brake');
+
+for (const b of document.querySelectorAll<HTMLButtonElement>('#homeCtl [data-game]')) {
+  b.addEventListener('click', () => send({ t: 'select', game: b.dataset.game }));
+}
+for (const id of ['homeBtn', 'gamesBtn']) {
+  $(id).addEventListener('click', () => send({ t: 'select', game: 'home' }));
+}
+
+function press(name: PadButton): void {
+  send({ t: 'btn', name });
+  if ('vibrate' in navigator) navigator.vibrate(10);
+}
+
+$('enableBtn').addEventListener('click', async () => {
+  $('error').hidden = true;
+  if (!room) {
+    const typed = ($('roomInput') as HTMLInputElement).value.trim().toUpperCase();
+    if (typed.length !== 4) {
+      showError('Enter the 4-letter room code shown on the laptop.');
+      return;
+    }
+    room = typed;
+    connect();
+  }
+  if (await enableMotion()) {
+    $('enable').hidden = true;
+    $('controls').hidden = false;
+    void keepAwake();
+    renderInfo();
+  }
+});
+$('jumpBtn').addEventListener('pointerdown', () => {
+  send({ t: 'jump', r: 0 });
+  if ('vibrate' in navigator) navigator.vibrate(12);
+});
+$('centerBtn').addEventListener('click', () => press('center'));
+$('startBtn').addEventListener('click', () => press('start'));
+$('pauseBtn').addEventListener('click', () => press('pause'));
+
+const sens = $('sens') as HTMLInputElement;
+try {
+  sens.value = localStorage.getItem('sens') ?? '1';
+} catch {
+  /* ignore */
+}
+const showSens = () => {
+  $('sensVal').textContent = `${Number(sens.value).toFixed(1)}×`;
+  detector.sens = Number(sens.value);
+  $('meterThr').style.left = `${(spikeThreshold(detector.sens) / 3) * 100}%`;
+};
+showSens();
+sens.addEventListener('input', () => {
+  showSens();
+  send({ t: 'cfg', sens: Number(sens.value) });
+  try {
+    localStorage.setItem('sens', sens.value);
+  } catch {
+    /* ignore */
+  }
+});
+
+// Jump meter: live accelerometer strength with a peak hold, so you can see what a jump looks like.
+function meterLoop(): void {
+  if (!$('jumpCtl').hidden) {
+    const bar = $('meterBar');
+    const shown = Math.min(3, Math.max(detector.ratio, meterPeak));
+    bar.style.width = `${(shown / 3) * 100}%`;
+    bar.classList.toggle('hot', shown >= spikeThreshold(detector.sens));
+    meterPeak *= 0.94;
+    if (game === 'jump' && sensing && performance.now() - lastMotion > 2500) {
+      $('meterLabel').textContent = 'No accelerometer data. Check motion access in the browser settings.';
+    } else {
+      $('meterLabel').textContent = 'Jump meter: the bar must pass the line';
+    }
+  }
+  requestAnimationFrame(meterLoop);
+}
+requestAnimationFrame(meterLoop);
+
+// Samples sent per second, readable from the console / tests as window.__padRate
+setInterval(() => {
+  (window as unknown as { __padRate: number }).__padRate = sent;
+  sent = 0;
+}, 1000);
+
+// ---------------------------------------------------------------- start
+if (!room) {
+  $('manual').hidden = false;
+  $('hint').textContent = 'Enter the room code from the laptop, then tap the button.';
+  setStatus('No room code', 'false');
+} else {
+  connect();
+}

@@ -1,0 +1,304 @@
+:root {
+  color-scheme: dark;
+  --bg: #120b1c;
+  --fg: #fff;
+  --muted: rgba(255, 255, 255, 0.65);
+  --accent: #78dcff;
+  --ok: #7be495;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  cursor: crosshair;
+  user-select: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+
+#home {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 22vh;
+  background: radial-gradient(circle at 50% 35%, #3b2a4a, #120b1c 75%);
+  z-index: 10;
+}
+#home[hidden] {
+  display: none;
+}
+#menuTitle {
+  display: none;
+  margin: 0 0 22px;
+  font-size: 28px;
+  font-weight: 800;
+}
+/* Menu opened on top of a game: dim the game behind it */
+body[data-menu='open'] #home {
+  background: rgba(18, 11, 28, 0.9);
+  backdrop-filter: blur(6px);
+  cursor: default;
+}
+body[data-menu='open'] #menuTitle {
+  display: block;
+}
+body[data-menu='open'] {
+  cursor: default;
+}
+.card.current {
+  border-color: var(--ok);
+  background: rgba(123, 228, 149, 0.1);
+}
+.card.current::after {
+  content: 'playing now';
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ok);
+}
+#resumeBtn {
+  margin-top: 28px;
+  padding: 12px 28px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--accent);
+  color: #08202b;
+  font: 700 17px system-ui, sans-serif;
+  cursor: pointer;
+}
+#resumeBtn[hidden] {
+  display: none;
+}
+#resumeBtn small,
+#menuBtn small {
+  margin-left: 6px;
+  opacity: 0.6;
+  font-weight: 500;
+}
+#menuBtn {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(20, 12, 30, 0.6);
+  color: var(--fg);
+  font: 600 14px system-ui, sans-serif;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+#menuBtn:hover,
+#menuBtn:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+body[data-mode='home'] #menuBtn,
+body[data-menu='open'] #menuBtn {
+  display: none;
+}
+body[data-state='playing'] #menuBtn {
+  cursor: pointer;
+}
+.cards {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.card {
+  width: 250px;
+  padding: 26px 20px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+}
+.card:hover,
+.card:focus-visible {
+  transform: translateY(-4px);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--accent);
+  outline: none;
+}
+.card .icon {
+  font-size: 72px;
+  line-height: 1.1;
+}
+.card b {
+  font-size: 22px;
+}
+.card small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+#title {
+  position: fixed;
+  top: 5vh;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+#title h1 {
+  margin: 0;
+  font-size: clamp(32px, 6vw, 72px);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #ff9f1c, #ff4d6d, #9d4edd);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+#title p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: clamp(14px, 1.6vw, 20px);
+}
+
+#pair {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  max-width: min(560px, calc(100vw - 48px));
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(20, 12, 30, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.25s;
+}
+#qr {
+  width: 150px;
+  height: 150px;
+  flex: none;
+  border-radius: 10px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+.meta {
+  min-width: 0;
+}
+.label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.code {
+  font: 800 34px/1.1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: 0.18em;
+}
+.chip {
+  display: inline-block;
+  margin: 8px 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.chip[data-on='true'] {
+  background: rgba(123, 228, 149, 0.2);
+  color: var(--ok);
+}
+#pair ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.85);
+}
+#pair small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* Hide the pairing card and title while a round is running. */
+body[data-state='playing'] #pair,
+body[data-state='paused'] #pair,
+body[data-state='playing'] #title,
+body[data-state='paused'] #title {
+  opacity: 0;
+  pointer-events: none;
+}
+body[data-state='playing'] {
+  cursor: none;
+}
+body[data-state='home'] {
+  cursor: default;
+}
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(255, 93, 93, 0.9);
+  font-weight: 600;
+}
+
+#debug {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  font: 12px/1.5 ui-monospace, Menlo, monospace;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  #qr {
+    width: 110px;
+    height: 110px;
+  }
+}
+
+/* Pairing card: show only the instructions for the game that is open */
+#pair li[data-for] {
+  display: none;
+}
+body[data-mode='fruit'] #pair li[data-for='fruit'],
+body[data-mode='car'] #pair li[data-for='car'],
+body[data-mode='yoga'] #pair li[data-for='yoga'],
+body[data-mode='jump'] #pair li[data-for='jump'] {
+  display: list-item;
+}
