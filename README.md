@@ -23,6 +23,7 @@ Four small games that run in the browser on your laptop and use **your phone's m
 | 2 | 🏎️ **Gyro Racer** | Roll the phone like a steering wheel; tap GAS on the phone to go (tap again to lift off), hold BRAKE |
 | 3 | 🦘 **Jump Run** | Really jump. The accelerometer detects it and the runner jumps over obstacles |
 | 4 | 🧘 **Yoga Flow** | Phone against your chest, move through five poses and hold them still |
+| 7 | 🎾 **Tennis** | Swing the phone like a racket; put it on the ball and hit it back over the net |
 
 ```
 phone (/pad page)  ──WebSocket──▶  Node server (rooms)  ──WebSocket──▶  laptop (games)
@@ -65,7 +66,7 @@ npm run dev
 
 | Where | How |
 |---|---|
-| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow. **Resume** / `Esc` / `H` closes it. |
+| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow, `7` Tennis. **Resume** / `Esc` / `H` closes it. |
 | Phone | **☰ Choose game** button (bottom of the controller, also **☰ Menu** at the top) opens the same menu on the laptop and shows the game buttons |
 
 ### Controls
@@ -99,6 +100,8 @@ Click the laptop page once to enable sound.
 5. Mountain again
 
 Each pose must be held for 8 seconds and held **still**; if you wobble, progress slows. Slow, steady breathing scores best (60–100 points per pose, up to 500). If the figure leans the wrong way for you, press `F` on the laptop to mirror it. Without a phone, use the arrow keys (left/right = side bend, down/up = fold).
+
+**Tennis.** Hold the phone like a racket handle, top edge pointing at the screen, press **Centre**, then **Start**. The racket on screen follows the phone. A dashed ring shows where the ball will arrive: have the racket there when the ball does. Holding still blocks the ball back softly; the faster you swing the phone, the faster and deeper the ball goes (its speed in km/h shows after each shot), and the direction of the swing aims it (a full upward swing goes long). 1 point for each return that lands in, 3 more when the computer player cannot reach it. Each point starts with a serve into the service box. Swing down at a low ball and it goes into the net; catch it off the middle of the strings and it comes off weak. Letting a ball past costs one of three lives. The mouse also works as the racket.
 
 ## Scripts
 

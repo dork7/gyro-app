@@ -187,7 +187,7 @@ function renderInfo(): void {
   $('jumpCtl').hidden = game !== 'jump';
   $('homeBtn').hidden = home || $('controls').hidden;
   $('gamesBtn').hidden = home || $('controls').hidden;
-  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : 'Centre';
+  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : 'Centre';
 
   const ready =
     game === 'car'
@@ -198,11 +198,15 @@ function renderInfo(): void {
           ? 'Hold the phone to your chest, stand tall, press Start'
           : game === 'write'
             ? 'Hold the phone like a pen, point at the screen, Centre pen, then Start'
+            : game === 'phonics'
+              ? 'Point at the screen, Centre pointer, then Start and listen'
+              : game === 'tennis'
+                ? 'Hold the phone like a racket, point at the screen, Centre racket, then Start'
             : 'Slice the watermelon or press Start';
   const lines = home
     ? ['Choose a game (or pick the current one to resume)']
     : gameState === 'playing'
-      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : 'Lives'} ${info.lives}`]
+      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : game === 'phonics' ? 'Sounds left' : 'Lives'} ${info.lives}`]
       : gameState === 'over'
         ? [`Game over: ${info.score}  (best ${info.best})`]
         : gameState === 'paused'
@@ -210,7 +214,7 @@ function renderInfo(): void {
           : [ready];
   $('info').textContent = lines.join('\n');
   $('pauseBtn').textContent = gameState === 'paused' ? 'Resume' : 'Pause';
-  $('startBtn').textContent = gameState === 'over' ? 'Play again' : game === 'write' && gameState === 'playing' ? 'Skip digit' : 'Start';
+  $('startBtn').textContent = gameState === 'over' ? 'Play again' : game === 'write' && gameState === 'playing' ? 'Skip digit' : game === 'phonics' && gameState === 'playing' ? '🔊 Hear again' : 'Start';
   if (home || game !== 'car' || gameState === 'over') releasePedals();
 }
 

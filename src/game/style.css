@@ -300,6 +300,8 @@ body[data-mode='fruit'] #pair li[data-for='fruit'],
 body[data-mode='car'] #pair li[data-for='car'],
 body[data-mode='yoga'] #pair li[data-for='yoga'],
 body[data-mode='write'] #pair li[data-for='write'],
+body[data-mode='phonics'] #pair li[data-for='phonics'],
+body[data-mode='tennis'] #pair li[data-for='tennis'],
 body[data-mode='jump'] #pair li[data-for='jump'] {
   display: list-item;
 }

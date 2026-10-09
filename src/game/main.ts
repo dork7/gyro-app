@@ -5,6 +5,8 @@ import { Sfx } from './audio';
 import { CarGame } from './car';
 import { Game } from './game';
 import { JumpGame } from './jump';
+import { PhonicsGame } from './phonics';
+import { TennisGame } from './tennis';
 import { YogaGame } from './yoga';
 import { WriteGame } from './write';
 import { HostConnection } from './net';
@@ -31,6 +33,8 @@ const car = new CarGame(canvas, sfx, hooks);
 const jump = new JumpGame(canvas, sfx, hooks);
 const yoga = new YogaGame(canvas, sfx, hooks);
 const write = new WriteGame(canvas, sfx, hooks);
+const phonics = new PhonicsGame(canvas, sfx, hooks);
+const tennis = new TennisGame(canvas, sfx, hooks);
 
 // ---------------------------------------------------------------- which game is showing
 let mode: GameId = 'home';
@@ -42,7 +46,7 @@ function setMode(next: GameId): void {
   resetMenuUi();
   mode = next;
   document.body.dataset.mode = next;
-  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : null;
+  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : next === 'phonics' ? phonics : next === 'tennis' ? tennis : null;
   $('home').hidden = next !== 'home';
   $('title').querySelector('h1')!.textContent = scene?.title ?? 'Gyro Arcade';
   $('title').querySelector('p')!.textContent = scene?.subtitle ?? 'Pick a game. Your phone is the controller.';
@@ -147,6 +151,13 @@ const net: HostConnection = new HostConnection({
     } else if (mode === 'write' && !menuOpen) {
       const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
       write.penMove(p.x + write.shiftX, p.y, now);
+    } else if (mode === 'phonics' && !menuOpen) {
+      const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
+      phonics.penMove(p.x, p.y, now);
+    } else if (mode === 'tennis' && !menuOpen) {
+      const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
+      tennis.racketMove(p.x, p.y, now);
+      tennis.swingAim(latest.yaw, latest.pitch, now);
     }
   },
   onButton(name) {
@@ -170,7 +181,7 @@ const net: HostConnection = new HostConnection({
   onSelect(game) {
     sfx.unlock();
     if (game === 'home') openMenu();
-    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write') choose(game);
+    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis') choose(game);
   },
   onJump(strength) {
     sfx.unlock();
@@ -200,12 +211,17 @@ async function renderQr(room: string): Promise<void> {
 
 // ---------------------------------------------------------------- mouse and keyboard
 window.addEventListener('pointermove', (e) => {
-  if ((mode !== 'fruit' && mode !== 'write') || menuOpen) return;
+  if ((mode !== 'fruit' && mode !== 'write' && mode !== 'phonics' && mode !== 'tennis') || menuOpen) return;
   if (performance.now() - lastPadSample < 1500) return; // phone wins while it is streaming
   if (mode === 'write') write.penMove(e.clientX, e.clientY, performance.now());
+  else if (mode === 'phonics') phonics.penMove(e.clientX, e.clientY, performance.now());
+  else if (mode === 'tennis') tennis.racketMove(e.clientX, e.clientY, performance.now());
   else fruit.pointerMove(e.clientX, e.clientY, performance.now());
 });
-window.addEventListener('pointerdown', () => sfx.unlock());
+window.addEventListener('pointerdown', (e) => {
+  sfx.unlock();
+  if (mode === 'phonics' && !menuOpen && e.target === canvas) phonics.click(e.clientX, e.clientY);
+});
 window.addEventListener('keydown', (e) => {
   sfx.unlock();
   if (!menuOpen) {
@@ -222,6 +238,8 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit3') choose('jump');
   else if (e.code === 'Digit4') choose('yoga');
   else if (e.code === 'Digit5') choose('write');
+  else if (e.code === 'Digit6') choose('phonics');
+  else if (e.code === 'Digit7') choose('tennis');
   else if (e.code === 'KeyH') toggleMenu();
   else if (e.code === 'Escape' && menuOpen) closeMenu();
   else if (menuOpen) {
@@ -233,6 +251,7 @@ window.addEventListener('keydown', (e) => {
     else if (mode === 'yoga') yoga.calibrate();
     else if (latest) mapper.setCenter(latest);
   } else if (e.code === 'KeyM') sfx.muted = !sfx.muted;
+  else if (e.code === 'KeyV' && mode === 'phonics') phonics.nextVoice();
   else if (e.code === 'KeyD') $('debug').hidden = !$('debug').hidden;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
@@ -290,6 +309,6 @@ function loop(t: number): void {
 requestAnimationFrame(loop);
 
 // Handy for debugging from the browser console (and used by the automated test).
-Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
+Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __phonics: phonics, __tennis: tennis, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
 
 setMode('home');

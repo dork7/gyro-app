@@ -96,6 +96,11 @@ export class Sfx {
     this.tone('square', 988, 988, 0.05, 0.08);
     this.tone('square', 1319, 1319, 0.12, 0.08, 0.05);
   }
+  /** Ball on racket strings. */
+  racket(): void {
+    this.noise(0.06, 2600, 900, 0.5);
+    this.tone('sine', 240, 120, 0.09, 0.3);
+  }
   pass(): void {
     this.tone('sine', 900, 1300, 0.07, 0.1);
   }
