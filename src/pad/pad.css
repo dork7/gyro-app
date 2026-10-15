@@ -61,6 +61,10 @@ h1 {
   background: rgba(255, 123, 123, 0.2);
   color: var(--bad);
 }
+.chip[data-on='true'] {
+  background: rgba(123, 228, 149, 0.2);
+  color: var(--ok);
+}
 
 section {
   display: flex;

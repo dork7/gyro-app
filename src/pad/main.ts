@@ -20,6 +20,7 @@ const detector = new JumpDetector();
 let lastMotion = 0;
 let meterPeak = 0;
 let info = { score: 0, lives: 3, best: 0 };
+let wakeLock: unknown = null;
 
 // ---------------------------------------------------------------- status UI
 function setStatus(text: string, kind: 'true' | 'false' | 'error'): void {
@@ -166,16 +167,48 @@ async function enableMotion(): Promise<boolean> {
   return true;
 }
 
-async function keepAwake(): Promise<void> {
+async function requestWakeLock(): Promise<void> {
   try {
-    await (navigator as unknown as { wakeLock?: { request(t: string): Promise<unknown> } }).wakeLock?.request('screen');
+    wakeLock = await (navigator as unknown as { wakeLock?: { request(t: string): Promise<unknown> } }).wakeLock?.request('screen');
+    if (wakeLock && typeof wakeLock === 'object' && 'addEventListener' in wakeLock) {
+      (wakeLock as EventTarget).addEventListener('release', () => {
+        wakeLock = null;
+        updateWakeStatus();
+        if (sensing && document.visibilityState === 'visible') void requestWakeLock();
+      });
+    }
+    updateWakeStatus();
   } catch {
     /* not supported or denied: fine */
   }
 }
+
+async function releaseWakeLock(): Promise<void> {
+  if (wakeLock && typeof wakeLock === 'object' && 'release' in wakeLock) {
+    try { await (wakeLock as { release(): Promise<void> }).release(); } catch { /* ignore */ }
+    wakeLock = null;
+  }
+  updateWakeStatus();
+}
+
+function updateWakeStatus(): void {
+  const el = $('wakeStatus');
+  if (wakeLock) {
+    el.hidden = false;
+    el.dataset.on = 'true';
+  } else {
+    el.hidden = true;
+    el.dataset.on = 'false';
+  }
+}
+
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && sensing) void keepAwake();
+  if (document.visibilityState === 'visible' && sensing) void requestWakeLock();
+  else if (document.visibilityState === 'hidden' && wakeLock) void releaseWakeLock();
 });
+
+window.addEventListener('pagehide', () => void releaseWakeLock());
+window.addEventListener('beforeunload', () => void releaseWakeLock());
 
 // ---------------------------------------------------------------- UI wiring
 function renderInfo(): void {
@@ -281,7 +314,7 @@ $('enableBtn').addEventListener('click', async () => {
   if (await enableMotion()) {
     $('enable').hidden = true;
     $('controls').hidden = false;
-    void keepAwake();
+    void requestWakeLock();
     renderInfo();
   }
 });
