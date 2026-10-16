@@ -10,7 +10,7 @@ import { attach, startHeartbeat } from './rooms';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const prod = process.argv.includes('--prod');
-const port = Number(process.env.PORT ?? 5173);
+const port = Number(process.env.PORT ?? 5566);
 
 function lanAddresses(): string[] {
   const out: string[] = [];

@@ -16,7 +16,7 @@ set -euo pipefail
 
 MIN_NODE=18
 WANT_NODE=20
-PORT="${PORT:-5173}"
+PORT="${PORT:-5566}"
 START=0
 SERVICE=0
 TESTS=1

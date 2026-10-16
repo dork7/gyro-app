@@ -57,7 +57,7 @@ npm install
 npm run dev
 ```
 
-1. Open **https://localhost:5173** on the laptop (accept the certificate warning once).
+1. Open **https://localhost:5566** on the laptop (accept the certificate warning once).
 2. Scan the QR code with your phone. Phone and laptop must be on the **same Wi-Fi**.
 3. On the phone, accept the certificate warning, then tap **Enable motion** (iPhone shows a permission prompt).
 4. Pick a game on the laptop (click a card, or keys `1`–`4`) or on the phone.
@@ -120,7 +120,7 @@ Run only the server on the Pi and play on the laptop. This is the easy option an
 
 1. Install Node 20+ on 64-bit Raspberry Pi OS.
 2. Copy the project to the Pi (without `node_modules`), then `npm install && npm start`.
-3. On the laptop open `https://<pi-ip>:5173` and scan the QR code with the phone.
+3. On the laptop open `https://<pi-ip>:5566` and scan the QR code with the phone.
 
 Notes: use the Pi's IP address (the certificate covers IP addresses, not `raspberrypi.local`); the first start generates the certificate, which takes 10–30 s on a Pi 3; to start it at boot, run `npm start` from a systemd service. Running the games *on* the Pi (Chromium on a monitor) is possible but a Pi 3 will struggle with the Racer; a Pi 4 or 5 is better. Not tested on a Pi yet.
 
