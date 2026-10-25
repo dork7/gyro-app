@@ -11,7 +11,11 @@
 // the computer player's reply is weaker when it had to stretch for the ball.
 //
 // Score: 1 for every return that lands in, 3 more for a winner (the computer cannot reach
-// it). Letting a ball go past costs a life; three lives. The ball gets faster as you go.
+// it). A long rally multiplies the points, a ball off the sweet spot of the strings earns 1
+// more, and landing in the glowing target on the far court 2 more. Letting a ball go past
+// costs a life; three lives, and a 10-shot rally wins one back. The ball gets faster as you go.
+//
+// A closing ring shows when the ball arrives, and turns green while the racket is on it.
 //
 // Physics and shot maths are in shared/tennis.ts.
 
@@ -38,6 +42,14 @@ const MARK_LIFE = 4; // seconds a bounce mark stays on the court
 const SWING_WINDOW = 110; // ms of movement the swing speed is measured over
 const SWINGING = 1.5; // racket speed (screen heights/s) that counts as a swing rather than holding still
 const BLOCK_Z = 0.4; // a still racket only blocks the ball once it is this close (m): until then there is time to swing
+const SWEET = 0.3; // a hit this close to the middle of the strings (share of REACH) is a sweet-spot hit
+const HIT_STOP = 0.07; // seconds the action freezes on a sweet-spot hit, for weight
+const CLOSE_T = 1.1; // seconds before arrival that the timing ring starts closing in
+const TARGET = 1.4; // half-size (m) of the target square on the far court
+const MULTI_EVERY = 4; // rally shots per step of the points multiplier
+const MULTI_MAX = 4;
+const LIFE_RALLY = 10; // a rally this long wins back a life
+const TRAIL = 10; // positions kept for the ball's comet trail
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
@@ -77,7 +89,13 @@ export class TennisGame implements Scene {
   private side = 1; // which side of the centre mark the next serve comes from
   private marks: { x: number; z: number; t: number }[] = []; // where balls have bounced
   private mark: Vec3 | null = null; // where the incoming ball will arrive
+  private markAt = 0; // game time it gets there
   private cpu = { x: 0, swing: 0 };
+  private target: { x: number; z: number } | null = null; // bonus square on the far court
+  private sweetHit = false; // the ball in flight came off the sweet spot
+  private ballTrail: P[] = [];
+  private freeze = 0; // hit-stop left, seconds
+  private shake = 0; // screen shake strength, px
 
   // racket
   private pen: P | null = null;
@@ -188,7 +206,28 @@ export class TennisGame implements Scene {
     this.side = 1;
     this.marks = [];
     this.particles = [];
+    this.ballTrail = [];
+    this.freeze = 0;
+    this.shake = 0;
     this.note.t = 0;
+    this.newTarget();
+  }
+
+  private newTarget(): void {
+    this.target = { x: rand(-HALF_W + TARGET, HALF_W - TARGET), z: rand(NET_Z + SERVICE - 1, LENGTH - TARGET - 0.3) };
+  }
+
+  /** Points multiplier for the current rally. */
+  private get multi(): number {
+    return Math.min(MULTI_MAX, 1 + Math.floor(this.rally / MULTI_EVERY));
+  }
+
+  private burst(x: number, y: number, n: number, speed: number, color: string): void {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = rand(0.3, 1) * speed;
+      this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.35, 0.7), color });
+    }
   }
 
   private setState(s: GameState): void {
@@ -236,6 +275,8 @@ export class TennisGame implements Scene {
     this.ball = incomingShot(from, rand(-SERVE_X, SERVE_X), speed, rand(0.9, 1.7), serve ? NET_Z - SERVICE : 3);
     const a = arrival(this.ball);
     this.mark = { x: a.x, y: a.y, z: 0 };
+    this.markAt = this.time + a.t;
+    this.ballTrail = [];
     this.phase = 'incoming';
     this.cpu.swing = 0.3;
     this.sfx.racket();
@@ -265,16 +306,27 @@ export class TennisGame implements Scene {
     this.hits++;
     this.rally++;
     this.flash = 0.18;
+    this.ballTrail = [];
+    this.sweetHit = off <= SWEET;
+    const p = this.at(b.p);
     // off the frame it thuds instead of pinging
     if (off > 0.6) this.sfx.land();
+    else if (this.sweetHit) this.sfx.sweet();
     else this.sfx.racket();
-    this.hooks.onHaptic(Math.round(25 + 45 * shot.power));
-    const p = this.at(b.p);
-    for (let i = 0; i < 10; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const v = rand(80, 320) * (0.5 + shot.power);
-      this.particles.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4, color: '#e6ff5a' });
+    if (this.sweetHit) {
+      this.freeze = HIT_STOP;
+      this.say('Sweet spot!', '#e6ff5a');
+      this.burst(p.x, p.y, 14, 420, '#ffffff');
+    } else if (off > 0.6) this.say('Off the frame', '#c9d1d9');
+    if (shot.power > 0.7) this.shake = 4 + 8 * shot.power;
+    if (this.rally > 0 && this.rally % MULTI_EVERY === 0 && this.multi > 1) this.say(`Rally x${this.multi}`, '#7be495');
+    if (this.rally === LIFE_RALLY && this.lives < LIVES) {
+      this.lives++;
+      this.say('Rally 10! +♥', '#ff8fab');
+      this.sfx.coin();
     }
+    this.hooks.onHaptic(Math.round(25 + 45 * shot.power + (this.sweetHit ? 20 : 0)));
+    this.burst(p.x, p.y, 10, 320 * (0.5 + shot.power), '#e6ff5a');
   }
 
   /** The point is over: the next ball comes after a short pause. */
@@ -284,12 +336,14 @@ export class TennisGame implements Scene {
     this.rally = 0;
     this.mark = null;
     this.side = -this.side;
+    this.newTarget();
   }
 
   private miss(): void {
     this.lives--;
     this.sfx.miss();
     this.hooks.onHaptic(140);
+    this.shake = 14;
     this.say('Missed', '#ff6b6b');
     this.ball = null;
     if (this.lives <= 0) {
@@ -322,8 +376,14 @@ export class TennisGame implements Scene {
       p.life -= dt;
     }
     this.particles = this.particles.filter((p) => p.life > 0);
+    this.shake = Math.max(0, this.shake - dt * 40);
 
-    if (this.state === 'playing') this.play(dt);
+    if (this.freeze > 0) this.freeze -= dt;
+    else if (this.state === 'playing') this.play(dt);
+    if (this.ball && this.state === 'playing') {
+      this.ballTrail.push(this.at(this.ball.p));
+      if (this.ballTrail.length > TRAIL) this.ballTrail.shift();
+    }
     this.prevPen = this.pen ? { ...this.pen } : null;
   }
 
@@ -393,7 +453,17 @@ export class TennisGame implements Scene {
         this.rest(1.4);
         return;
       }
-      this.score++;
+      let pts = 1 + (this.sweetHit ? 1 : 0);
+      const tg = this.target;
+      if (tg && Math.abs(b.p.x - tg.x) <= TARGET && Math.abs(b.p.z - tg.z) <= TARGET) {
+        pts += 2;
+        this.say('Bullseye! +2', '#ffd166');
+        this.sfx.coin();
+        const p = this.at(b.p);
+        this.burst(p.x, p.y, 18, 260, '#ffd166');
+        this.newTarget();
+      }
+      this.score += pts * this.multi;
       this.hooks.onChange();
     } else if (bounced) {
       // a second bounce before the computer player gets to it
@@ -411,9 +481,10 @@ export class TennisGame implements Scene {
 
   /** The computer player could not get the ball back. */
   private winner(): void {
-    this.score += 3;
-    this.say('Winner! +3', '#7be495');
+    this.score += 3 * this.multi;
+    this.say(`Winner! +${3 * this.multi}`, '#7be495');
     this.sfx.combo();
+    this.sfx.applause(16 + Math.min(30, this.rally * 3));
     this.hooks.onHaptic(60);
     this.hooks.onChange();
     this.rest(1.4);
@@ -448,7 +519,10 @@ export class TennisGame implements Scene {
   private render(): void {
     const c = this.ctx;
     const { w, h } = this;
+    c.save();
+    if (this.shake > 0) c.translate(rand(-1, 1) * this.shake, rand(-1, 1) * this.shake);
     this.court();
+    this.targetZone();
     this.bounceMarks();
 
     const b = this.ball && this.ball.p.z > CAM_Z + 1 ? this.ball : null;
@@ -459,16 +533,7 @@ export class TennisGame implements Scene {
     }
     if (b && b.p.z > NET_Z) this.drawBall(b);
     this.net();
-    if (this.mark && this.phase === 'incoming' && this.state !== 'over') {
-      const m = this.at(this.mark);
-      c.strokeStyle = `rgba(255,255,255,${0.35 + 0.2 * Math.sin(this.time * 8)})`;
-      c.lineWidth = 3;
-      c.setLineDash([10, 8]);
-      c.beginPath();
-      c.arc(m.x, m.y, REACH * m.s * 0.8, 0, Math.PI * 2);
-      c.stroke();
-      c.setLineDash([]);
-    }
+    if (this.mark && this.phase === 'incoming' && this.state !== 'over') this.timingRing();
     if (b && b.p.z <= NET_Z) this.drawBall(b);
 
     for (const p of this.particles) {
@@ -479,6 +544,7 @@ export class TennisGame implements Scene {
     c.globalAlpha = 1;
 
     this.racket();
+    c.restore();
     this.hud();
 
     if (this.note.t > 0 && this.state === 'playing') {
@@ -552,6 +618,52 @@ export class TennisGame implements Scene {
     // centre marks on the baselines
     this.line({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0.3 });
     this.line({ x: 0, y: 0, z: LENGTH - 0.3 }, { x: 0, y: 0, z: LENGTH });
+  }
+
+  /**
+   * Where the incoming ball will arrive: a dashed ring the racket should be on, and an
+   * outer ring that closes onto it as the ball gets there. Both turn green while the
+   * racket is in reach.
+   */
+  private timingRing(): void {
+    const c = this.ctx;
+    const m = this.at(this.mark!);
+    const r = REACH * m.s * 0.8;
+    const on = this.pen !== null && Math.hypot(this.pen.x - m.x, this.pen.y - m.y) <= REACH * m.s;
+    const rgb = on ? '123,228,149' : '255,255,255';
+    c.strokeStyle = `rgba(${rgb},${0.45 + 0.2 * Math.sin(this.time * 8)})`;
+    c.lineWidth = 3;
+    c.setLineDash([10, 8]);
+    c.beginPath();
+    c.arc(m.x, m.y, r, 0, Math.PI * 2);
+    c.stroke();
+    c.setLineDash([]);
+    const left = clamp((this.markAt - this.time) / CLOSE_T, 0, 1);
+    if (left > 0) {
+      c.strokeStyle = `rgba(${rgb},${0.25 + 0.6 * (1 - left)})`;
+      c.lineWidth = 2 + 3 * (1 - left);
+      c.beginPath();
+      c.arc(m.x, m.y, r * (1 + 2.2 * left), 0, Math.PI * 2);
+      c.stroke();
+    }
+  }
+
+  /** The bonus square on the far court. */
+  private targetZone(): void {
+    const tg = this.target;
+    if (!tg || this.state === 'menu') return;
+    const c = this.ctx;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 4);
+    const corners = [
+      { x: tg.x - TARGET, y: 0, z: tg.z - TARGET },
+      { x: tg.x + TARGET, y: 0, z: tg.z - TARGET },
+      { x: tg.x + TARGET, y: 0, z: tg.z + TARGET },
+      { x: tg.x - TARGET, y: 0, z: tg.z + TARGET },
+    ];
+    this.quad(corners, `rgba(255,209,102,${0.14 + 0.12 * pulse})`);
+    c.strokeStyle = `rgba(255,209,102,${0.5 + 0.4 * pulse})`;
+    c.lineWidth = 2;
+    for (let i = 0; i < 4; i++) this.line(corners[i]!, corners[(i + 1) % 4]!);
   }
 
   /** Scuffs where balls have bounced, fading out. */
@@ -653,6 +765,22 @@ export class TennisGame implements Scene {
     c.beginPath();
     c.ellipse(shadow.x, shadow.y, r * (1.1 + 0.5 * lift), r * (0.4 + 0.18 * lift), 0, 0, Math.PI * 2);
     c.fill();
+    // comet trail over the last few frames: gold after a sweet-spot hit
+    const trail = this.ballTrail;
+    if (b === this.ball && trail.length > 2) {
+      const col = this.phase === 'outgoing' && this.sweetHit ? '255,209,102' : '230,255,90';
+      c.lineCap = 'round';
+      for (let i = 1; i < trail.length; i++) {
+        const k = i / trail.length;
+        c.strokeStyle = `rgba(${col},${0.25 * k})`;
+        c.lineWidth = r * 2 * k;
+        c.beginPath();
+        c.moveTo(trail[i - 1]!.x, trail[i - 1]!.y);
+        c.lineTo(trail[i]!.x, trail[i]!.y);
+        c.stroke();
+      }
+      c.lineCap = 'butt';
+    }
     // a fast ball leaves a short streak
     const tail = this.at({ x: b.p.x - b.v.x * 0.035, y: Math.max(0, b.p.y - b.v.y * 0.035), z: b.p.z - b.v.z * 0.035 });
     if (Math.hypot(tail.x - p.x, tail.y - p.y) > r) {
@@ -745,7 +873,8 @@ export class TennisGame implements Scene {
       c.fillStyle = 'rgba(255,255,255,0.6)';
       c.font = '500 16px system-ui, sans-serif';
       c.fillText('Put the racket on the ring where the ball will arrive.', mx, my + 28);
-      c.fillText('The faster you swing, the faster the ball goes. Swing sideways to aim.' + (this.best ? `  Best: ${this.best}` : ''), mx, my + 48);
+      c.fillText('The faster you swing, the faster the ball goes. Swing sideways to aim.', mx, my + 48);
+      c.fillText('Hit when the outer ring closes. Land in the gold square for a bonus.' + (this.best ? `  Best: ${this.best}` : ''), mx, my + 68);
     }
 
     if (this.state === 'playing' || this.state === 'paused') {
@@ -753,6 +882,11 @@ export class TennisGame implements Scene {
       c.font = '700 22px system-ui, sans-serif';
       c.textAlign = 'left';
       c.fillText(`${'♥'.repeat(this.lives)}${'♡'.repeat(LIVES - this.lives)}${this.rally > 1 ? `   Rally ${this.rally}` : ''}`, 28, 36);
+      if (this.multi > 1) {
+        c.fillStyle = '#7be495';
+        c.fillText(`x${this.multi}`, 28, 64);
+        c.fillStyle = 'rgba(255,255,255,0.85)';
+      }
       c.textAlign = 'right';
       c.fillText(`Score ${this.score}`, w - 170, 36);
       if (this.shotT > 0) {

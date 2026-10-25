@@ -101,6 +101,19 @@ export class Sfx {
     this.noise(0.06, 2600, 900, 0.5);
     this.tone('sine', 240, 120, 0.09, 0.3);
   }
+  /** Crowd clapping: a scatter of short noise bursts. `n` is how many hands. */
+  applause(n = 24): void {
+    const c = this.ctx;
+    if (!c || this.muted || c.state !== 'running') return;
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => this.noise(0.03, 1800 + Math.random() * 1500, 900, 0.12 + Math.random() * 0.1), Math.random() * 900);
+    }
+  }
+  /** A clean hit off the middle of the strings: a brighter ping over the usual one. */
+  sweet(): void {
+    this.racket();
+    this.tone('sine', 1400, 1100, 0.12, 0.12);
+  }
   pass(): void {
     this.tone('sine', 900, 1300, 0.07, 0.1);
   }
