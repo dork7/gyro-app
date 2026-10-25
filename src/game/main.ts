@@ -5,6 +5,7 @@ import { Sfx } from './audio';
 import { CarGame } from './car';
 import { Game } from './game';
 import { JumpGame } from './jump';
+import { MazeGame } from './maze';
 import { PhonicsGame } from './phonics';
 import { TennisGame } from './tennis';
 import { YogaGame } from './yoga';
@@ -35,6 +36,7 @@ const yoga = new YogaGame(canvas, sfx, hooks);
 const write = new WriteGame(canvas, sfx, hooks);
 const phonics = new PhonicsGame(canvas, sfx, hooks);
 const tennis = new TennisGame(canvas, sfx, hooks);
+const maze = new MazeGame(canvas, sfx, hooks);
 
 // ---------------------------------------------------------------- which game is showing
 let mode: GameId = 'home';
@@ -46,7 +48,7 @@ function setMode(next: GameId): void {
   resetMenuUi();
   mode = next;
   document.body.dataset.mode = next;
-  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : next === 'phonics' ? phonics : next === 'tennis' ? tennis : null;
+  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : next === 'phonics' ? phonics : next === 'tennis' ? tennis : next === 'maze' ? maze : null;
   $('home').hidden = next !== 'home';
   $('title').querySelector('h1')!.textContent = scene?.title ?? 'Gyro Arcade';
   $('title').querySelector('p')!.textContent = scene?.subtitle ?? 'Pick a game. Your phone is the controller.';
@@ -126,6 +128,7 @@ const net: HostConnection = new HostConnection({
       latest = null;
       car.padLost();
       yoga.padLost();
+      maze.padLost();
     }
     if (!on && scene?.state === 'playing') toast('Phone disconnected: reconnecting…');
     if (on) hideToast();
@@ -141,6 +144,10 @@ const net: HostConnection = new HostConnection({
     }
     if (mode === 'yoga') {
       yoga.setOrientation(s, now);
+      return;
+    }
+    if (mode === 'maze') {
+      maze.setOrientation(s, now);
       return;
     }
     latest = aim(s);
@@ -166,6 +173,7 @@ const net: HostConnection = new HostConnection({
     if (name === 'center') {
       if (mode === 'car') car.calibrate();
       else if (mode === 'yoga') yoga.calibrate();
+      else if (mode === 'maze') maze.calibrate();
       else if (latest) mapper.setCenter(latest);
     } else if (name === 'start') scene?.requestStart();
     else if (name === 'pause') scene?.togglePause();
@@ -174,6 +182,7 @@ const net: HostConnection = new HostConnection({
     if (!Number.isFinite(v)) return;
     sens = Math.max(0.3, Math.min(4, v));
     car.setSensitivity(sens);
+    maze.setSensitivity(sens);
   },
   onPedal(gas, brake) {
     car.setPedals(gas, brake);
@@ -181,7 +190,7 @@ const net: HostConnection = new HostConnection({
   onSelect(game) {
     sfx.unlock();
     if (game === 'home') openMenu();
-    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis') choose(game);
+    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis' || game === 'maze') choose(game);
   },
   onJump(strength) {
     sfx.unlock();
@@ -228,6 +237,7 @@ window.addEventListener('keydown', (e) => {
     car.keyDown(e.code);
     if (mode === 'jump') jump.keyDown(e.code);
     if (mode === 'yoga') yoga.keyDown(e.code);
+    if (mode === 'maze') maze.keyDown(e.code);
   }
   if (e.repeat) {
     if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
@@ -240,6 +250,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit5') choose('write');
   else if (e.code === 'Digit6') choose('phonics');
   else if (e.code === 'Digit7') choose('tennis');
+  else if (e.code === 'Digit8') choose('maze');
   else if (e.code === 'KeyH') toggleMenu();
   else if (e.code === 'Escape' && menuOpen) closeMenu();
   else if (menuOpen) {
@@ -249,6 +260,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyC') {
     if (mode === 'car') car.calibrate();
     else if (mode === 'yoga') yoga.calibrate();
+    else if (mode === 'maze') maze.calibrate();
     else if (latest) mapper.setCenter(latest);
   } else if (e.code === 'KeyM') sfx.muted = !sfx.muted;
   else if (e.code === 'KeyV' && mode === 'phonics') phonics.nextVoice();
@@ -259,6 +271,7 @@ window.addEventListener('keyup', (e) => {
   car.keyUp(e.code);
   jump.keyUp(e.code);
   yoga.keyUp(e.code);
+  maze.keyUp(e.code);
 });
 window.addEventListener('blur', () => {
   for (const k of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD']) car.keyUp(k);
@@ -309,6 +322,6 @@ function loop(t: number): void {
 requestAnimationFrame(loop);
 
 // Handy for debugging from the browser console (and used by the automated test).
-Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __phonics: phonics, __tennis: tennis, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
+Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __phonics: phonics, __tennis: tennis, __maze: maze, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
 
 setMode('home');

@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/dork7/gyro-app/main/setup.sh | bash
 This downloads the project into `~/gyro-app`, installs Node.js if it is missing, installs the dependencies, runs the checks and builds. On Windows, run it inside WSL. More options are in [Set up and run](#set-up-and-run).
 
 
-Four small games that run in the browser on your laptop and use **your phone's motion sensors as the controller**.
+Small games that run in the browser on your laptop and use **your phone's motion sensors as the controller**.
 
 | # | Game | How you play |
 |---|---|---|
@@ -24,6 +24,7 @@ Four small games that run in the browser on your laptop and use **your phone's m
 | 3 | 🦘 **Jump Run** | Really jump. The accelerometer detects it and the runner jumps over obstacles |
 | 4 | 🧘 **Yoga Flow** | Phone against your chest, move through five poses and hold them still |
 | 7 | 🎾 **Tennis** | Swing the phone like a racket; put it on the ball and hit it back over the net |
+| 8 | 🎱 **Marble Maze** | Hold the phone flat like a tray and tilt it to roll a marble through the maze |
 
 ```
 phone (/pad page)  ──WebSocket──▶  Node server (rooms)  ──WebSocket──▶  laptop (games)
@@ -60,20 +61,20 @@ npm run dev
 1. Open **https://localhost:5566** on the laptop (accept the certificate warning once).
 2. Scan the QR code with your phone. Phone and laptop must be on the **same Wi-Fi**.
 3. On the phone, accept the certificate warning, then tap **Enable motion** (iPhone shows a permission prompt).
-4. Pick a game on the laptop (click a card, or keys `1`–`4`) or on the phone.
+4. Pick a game on the laptop (click a card, or keys `1`–`8`) or on the phone.
 
 ### Changing game
 
 | Where | How |
 |---|---|
-| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow, `7` Tennis. **Resume** / `Esc` / `H` closes it. |
+| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow, `7` Tennis, `8` Marble Maze. **Resume** / `Esc` / `H` closes it. |
 | Phone | **☰ Choose game** button (bottom of the controller, also **☰ Menu** at the top) opens the same menu on the laptop and shows the game buttons |
 
 ### Controls
 
 | Control | Action |
 |---|---|
-| Phone: Centre | Set the current pose as "neutral" (sword centre, straight wheel, standing tall) |
+| Phone: Centre | Set the current pose as "neutral" (sword centre, straight wheel, standing tall, level tray) |
 | Phone: Start / Pause | Start, play again, pause, resume |
 | Phone: Sensitivity | Smaller movement for the same effect (jump: easier to trigger) |
 | Laptop `Space` / `Enter` | Start (in Jump Run, also jumps) |
@@ -103,6 +104,8 @@ Each pose must be held for 8 seconds and held **still**; if you wobble, progress
 
 **Tennis.** Hold the phone like a racket handle, top edge pointing at the screen, press **Centre**, then **Start**. The racket on screen follows the phone. A dashed ring shows where the ball will arrive: have the racket there when the ball does. Holding still blocks the ball back softly; the faster you swing the phone, the faster and deeper the ball goes (its speed in km/h shows after each shot), and the direction of the swing aims it (a full upward swing goes long). 1 point for each return that lands in, 3 more when the computer player cannot reach it. Each point starts with a serve into the service box. Swing down at a low ball and it goes into the net; catch it off the middle of the strings and it comes off weak. Letting a ball past costs one of three lives. The mouse also works as the racket.
 
+**Marble Maze.** Hold the phone flat on your palm, screen up, top edge pointing at the screen, and press **Level tray** (it sets how you hold it as "flat"), then **Start**. Tilt the phone to roll the marble to the 🏁; a bubble level in the corner shows the tilt. Holes wait in the mouths of side passages, so take turns carefully: a marble that drops in costs one of three. 💎 in dead ends are worth 25. Each cleared maze scores 100 × its number plus a time bonus, and the next one is bigger. Without a phone, the arrow keys tilt the tray.
+
 ## Scripts
 
 | Command | What it does |
@@ -131,8 +134,8 @@ Phone browsers only give web pages motion-sensor access on HTTPS. The server cre
 ## How it works
 
 - **`server/`**: HTTPS server, Vite dev middleware, and `rooms.ts`, which pairs one laptop with one phone per 4-letter room code and relays messages. Reconnection is built in on both sides; the laptop keeps its room code across refreshes.
-- **`src/shared/`**: code used by both sides: the message types (`protocol.ts`), orientation maths (`pointer.ts`), the jump detector (`jump.ts`) and the yoga pose maths (`yoga.ts`). All of it is unit-tested.
-- **`src/game/`**: one file per game (`game.ts` = Fruit Slicer, `car.ts`, `jump.ts`, `yoga.ts`) behind a shared `Scene` interface, plus `main.ts` that connects them to the network.
+- **`src/shared/`**: code used by both sides: the message types (`protocol.ts`), orientation maths (`pointer.ts`), the jump detector (`jump.ts`) the yoga pose maths (`yoga.ts`) and the marble maze physics (`marble.ts`). All of it is unit-tested.
+- **`src/game/`**: one file per game (`game.ts` = Fruit Slicer, `car.ts`, `jump.ts`, `yoga.ts`, `maze.ts`, …) behind a shared `Scene` interface, plus `main.ts` that connects them to the network.
 - **`src/pad/`**: the phone page: permission flow, sensor streaming, jump detection, buttons, wake lock, vibration feedback (Android only).
 
 Jump detection runs **on the phone**: it watches the accelerometer for the take-off spike (about 2 g at default sensitivity) or a short free-fall, and only sends a tiny "jump" message.

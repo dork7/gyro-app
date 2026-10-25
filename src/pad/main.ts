@@ -220,7 +220,7 @@ function renderInfo(): void {
   $('jumpCtl').hidden = game !== 'jump';
   $('homeBtn').hidden = home || $('controls').hidden;
   $('gamesBtn').hidden = home || $('controls').hidden;
-  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : 'Centre';
+  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : game === 'maze' ? 'Level tray' : 'Centre';
 
   const ready =
     game === 'car'
@@ -235,11 +235,13 @@ function renderInfo(): void {
               ? 'Point at the screen, Centre pointer, then Start and listen'
               : game === 'tennis'
                 ? 'Hold the phone like a racket, point at the screen, Centre racket, then Start'
+                : game === 'maze'
+                  ? 'Hold the phone flat, screen up, Level tray, then Start and tilt'
             : 'Slice the watermelon or press Start';
   const lines = home
     ? ['Choose a game (or pick the current one to resume)']
     : gameState === 'playing'
-      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : game === 'phonics' ? 'Sounds left' : 'Lives'} ${info.lives}`]
+      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : game === 'phonics' ? 'Sounds left' : game === 'maze' ? 'Marbles' : 'Lives'} ${info.lives}`]
       : gameState === 'over'
         ? [`Game over: ${info.score}  (best ${info.best})`]
         : gameState === 'paused'
