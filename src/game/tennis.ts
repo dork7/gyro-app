@@ -50,6 +50,9 @@ const MULTI_EVERY = 4; // rally shots per step of the points multiplier
 const MULTI_MAX = 4;
 const LIFE_RALLY = 10; // a rally this long wins back a life
 const TRAIL = 10; // positions kept for the ball's comet trail
+const BOARD_Z = LENGTH + 6; // advertising boards behind the far baseline
+const BOARD_H = 0.9;
+const RING_LIFE = 0.35; // seconds a shock ring takes to fade
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
@@ -96,6 +99,13 @@ export class TennisGame implements Scene {
   private ballTrail: P[] = [];
   private freeze = 0; // hit-stop left, seconds
   private shake = 0; // screen shake strength, px
+  private rings: { x: number; y: number; r: number; life: number; color: string }[] = []; // shock rings on hits
+  private cheer = 0; // seconds the crowd keeps jumping
+  private cpuRun = 0; // how fast the computer player is moving, m/s (smoothed)
+  private cpuDir = 0; // which way it is running, -1 to 1
+  private cpuStep = 0; // stride phase
+  // static scenery, painted once per screen size
+  private layers: Record<'sky' | 'crowd' | 'court' | 'net' | 'light', HTMLCanvasElement> | null = null;
 
   // racket
   private pen: P | null = null;
@@ -191,6 +201,7 @@ export class TennisGame implements Scene {
     this.canvas.style.width = `${this.w}px`;
     this.canvas.style.height = `${this.h}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.layers = null;
   }
 
   private reset(): void {
@@ -207,6 +218,7 @@ export class TennisGame implements Scene {
     this.marks = [];
     this.particles = [];
     this.ballTrail = [];
+    this.rings = [];
     this.freeze = 0;
     this.shake = 0;
     this.note.t = 0;
@@ -291,6 +303,11 @@ export class TennisGame implements Scene {
     this.marks.push({ x: b.p.x, z: b.p.z, t: this.time });
     if (this.marks.length > 12) this.marks.shift();
     this.sfx.land();
+    // a puff of dust off the court
+    const p = this.at({ x: b.p.x, y: 0, z: b.p.z });
+    for (let i = 0; i < 6; i++) {
+      this.particles.push({ x: p.x, y: p.y, vx: rand(-1, 1) * 6 * p.s, vy: -rand(0.5, 2) * 3 * p.s, life: rand(0.2, 0.4), color: 'rgba(200,220,255,0.6)' });
+    }
   }
 
   /** `off`: how far from the middle of the strings the ball was caught, 0 to 1. */
@@ -327,6 +344,7 @@ export class TennisGame implements Scene {
     }
     this.hooks.onHaptic(Math.round(25 + 45 * shot.power + (this.sweetHit ? 20 : 0)));
     this.burst(p.x, p.y, 10, 320 * (0.5 + shot.power), '#e6ff5a');
+    this.rings.push({ x: p.x, y: p.y, r: REACH * p.s * (0.6 + shot.power), life: RING_LIFE, color: this.sweetHit ? '#ffffff' : '#e6ff5a' });
   }
 
   /** The point is over: the next ball comes after a short pause. */
@@ -377,9 +395,19 @@ export class TennisGame implements Scene {
     }
     this.particles = this.particles.filter((p) => p.life > 0);
     this.shake = Math.max(0, this.shake - dt * 40);
+    this.cheer = Math.max(0, this.cheer - dt);
+    for (const r of this.rings) r.life -= dt;
+    this.rings = this.rings.filter((r) => r.life > 0);
 
+    const cx = this.cpu.x;
     if (this.freeze > 0) this.freeze -= dt;
     else if (this.state === 'playing') this.play(dt);
+    if (dt > 0) {
+      const v = (this.cpu.x - cx) / dt;
+      this.cpuRun += (Math.abs(v) - this.cpuRun) * Math.min(1, dt * 12);
+      this.cpuDir += (Math.sign(v) - this.cpuDir) * Math.min(1, dt * 8);
+      this.cpuStep += this.cpuRun * dt * 5;
+    }
     if (this.ball && this.state === 'playing') {
       this.ballTrail.push(this.at(this.ball.p));
       if (this.ballTrail.length > TRAIL) this.ballTrail.shift();
@@ -461,6 +489,8 @@ export class TennisGame implements Scene {
         this.sfx.coin();
         const p = this.at(b.p);
         this.burst(p.x, p.y, 18, 260, '#ffd166');
+        this.rings.push({ x: p.x, y: p.y, r: TARGET * p.s, life: RING_LIFE * 1.5, color: '#ffd166' });
+        this.cheer = 1;
         this.newTarget();
       }
       this.score += pts * this.multi;
@@ -485,6 +515,7 @@ export class TennisGame implements Scene {
     this.say(`Winner! +${3 * this.multi}`, '#7be495');
     this.sfx.combo();
     this.sfx.applause(16 + Math.min(30, this.rally * 3));
+    this.cheer = 1.6;
     this.hooks.onHaptic(60);
     this.hooks.onChange();
     this.rest(1.4);
@@ -519,9 +550,22 @@ export class TennisGame implements Scene {
   private render(): void {
     const c = this.ctx;
     const { w, h } = this;
+    const L = (this.layers ??= {
+      sky: this.layer(() => this.paintStadium()),
+      crowd: this.layer(() => this.paintCrowd()),
+      court: this.layer(() => this.paintCourt()),
+      net: this.layer(() => this.paintNet()),
+      light: this.layer(() => this.paintLights()),
+    });
+    c.fillStyle = '#050a14';
+    c.fillRect(0, 0, w, h);
     c.save();
     if (this.shake > 0) c.translate(rand(-1, 1) * this.shake, rand(-1, 1) * this.shake);
-    this.court();
+    c.drawImage(L.sky, 0, 0, w, h);
+    // the crowd jumps up and down for a while after a great shot
+    const jump = this.cheer > 0 ? -Math.abs(Math.sin(this.time * 16)) * 3 * Math.min(1, this.cheer) : 0;
+    c.drawImage(L.crowd, 0, jump, w, h);
+    c.drawImage(L.court, 0, 0, w, h);
     this.targetZone();
     this.bounceMarks();
 
@@ -532,17 +576,28 @@ export class TennisGame implements Scene {
       this.drawBall({ p: { x: this.cpu.x + 0.25, y: 1.2 + (SERVE_Y - 1.2) * up, z: CPU_Z }, v: { x: 0, y: 0, z: 0 } });
     }
     if (b && b.p.z > NET_Z) this.drawBall(b);
-    this.net();
+    c.drawImage(L.net, 0, 0, w, h);
     if (this.mark && this.phase === 'incoming' && this.state !== 'over') this.timingRing();
     if (b && b.p.z <= NET_Z) this.drawBall(b);
 
+    for (const r of this.rings) {
+      c.strokeStyle = r.color;
+      c.globalAlpha = clamp(r.life / RING_LIFE, 0, 1);
+      c.lineWidth = 2 + 4 * (r.life / RING_LIFE);
+      c.beginPath();
+      c.arc(r.x, r.y, r.r * (1.6 - r.life / RING_LIFE), 0, Math.PI * 2);
+      c.stroke();
+    }
     for (const p of this.particles) {
       c.globalAlpha = clamp(p.life * 3, 0, 1);
       c.fillStyle = p.color;
-      c.fillRect(p.x - 3, p.y - 3, 6, 6);
+      c.beginPath();
+      c.arc(p.x, p.y, 1.5 + 3 * clamp(p.life * 2, 0, 1), 0, Math.PI * 2);
+      c.fill();
     }
     c.globalAlpha = 1;
 
+    c.drawImage(L.light, 0, 0, w, h);
     this.racket();
     c.restore();
     this.hud();
@@ -551,11 +606,35 @@ export class TennisGame implements Scene {
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.globalAlpha = clamp(this.note.t * 2, 0, 1);
-      c.fillStyle = this.note.color;
       c.font = `800 ${Math.round(clamp(w * 0.04, 30, 56))}px system-ui, sans-serif`;
-      c.fillText(this.note.text, w / 2, h * 0.2 - (1.3 - this.note.t) * 20);
+      const y = h * 0.2 - (1.3 - this.note.t) * 20;
+      c.lineJoin = 'round';
+      c.lineWidth = 6;
+      c.strokeStyle = 'rgba(5,10,20,0.8)';
+      c.strokeText(this.note.text, w / 2, y);
+      c.fillStyle = this.note.color;
+      c.fillText(this.note.text, w / 2, y);
       c.globalAlpha = 1;
     }
+  }
+
+  /** Paints into an offscreen canvas the size of the screen, using the usual drawing helpers. */
+  private layer(paint: () => void): HTMLCanvasElement {
+    const dpr = window.devicePixelRatio || 1;
+    const cv = document.createElement('canvas');
+    cv.width = Math.floor(this.w * dpr);
+    cv.height = Math.floor(this.h * dpr);
+    const c = cv.getContext('2d');
+    if (!c) return cv;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const main = this.ctx;
+    this.ctx = c;
+    try {
+      paint();
+    } finally {
+      this.ctx = main;
+    }
+    return cv;
   }
 
   private quad(pts: Vec3[], fill: string): void {
@@ -581,43 +660,203 @@ export class TennisGame implements Scene {
     c.stroke();
   }
 
-  private court(): void {
+  /** Top of the stands, in screen pixels. */
+  private get standsTop(): number {
+    return this.h * 0.25;
+  }
+
+  /** Night sky, the stadium roof with its floodlights, and the empty stands. */
+  private paintStadium(): void {
+    const c = this.ctx;
+    const { w } = this;
+    const top = this.standsTop;
+    const sky = c.createLinearGradient(0, 0, 0, top);
+    sky.addColorStop(0, '#03070f');
+    sky.addColorStop(0.7, '#0c1a30');
+    sky.addColorStop(1, '#1b3152');
+    c.fillStyle = sky;
+    c.fillRect(0, 0, w, top);
+    for (let i = 0; i < 80; i++) {
+      c.fillStyle = `rgba(255,255,255,${rand(0.15, 0.7)})`;
+      const s = rand(0.6, 1.8);
+      c.fillRect(rand(0, w), rand(0, top * 0.75), s, s);
+    }
+    const foot = this.at({ x: 0, y: 0, z: BOARD_Z }).y;
+    const stand = c.createLinearGradient(0, top, 0, foot);
+    stand.addColorStop(0, '#0b1424');
+    stand.addColorStop(1, '#1c2c46');
+    c.fillStyle = stand;
+    c.fillRect(0, top, w, foot - top);
+    // roof edge, with a row of floodlights along it
+    c.fillStyle = '#070d18';
+    c.fillRect(0, top - 12, w, 14);
+    for (let i = 0; i < 9; i++) {
+      const x = ((i + 0.5) * w) / 9;
+      const y = top - 6;
+      const glow = c.createRadialGradient(x, y, 0, x, y, 48);
+      glow.addColorStop(0, 'rgba(255,248,215,0.55)');
+      glow.addColorStop(1, 'rgba(255,248,215,0)');
+      c.fillStyle = glow;
+      c.fillRect(x - 48, y - 48, 96, 96);
+      c.fillStyle = '#fffbea';
+      c.fillRect(x - 8, y - 3, 16, 6);
+    }
+  }
+
+  /** Rows of spectators, smaller towards the back. Rebuilt with each resize, so it is random. */
+  private paintCrowd(): void {
+    const c = this.ctx;
+    const shirts = ['#e63946', '#f1faee', '#a8dadc', '#457b9d', '#ffb703', '#fb8500', '#8ecae6', '#2a9d8f', '#e9c46a', '#6a4c93', '#ef476f'];
+    const skins = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
+    const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]!;
+    const top = this.standsTop;
+    const foot = this.at({ x: 0, y: 0, z: BOARD_Z }).y;
+    let y = top + 6;
+    while (y < foot) {
+      const k = (y - top) / Math.max(1, foot - top); // 0 back row, 1 front
+      const r = 1.8 + 2.4 * k; // head radius, px
+      c.globalAlpha = 0.5 + 0.45 * k;
+      for (let x = rand(0, 2 * r); x < this.w; x += r * 2.7 + rand(0, r * 0.6)) {
+        if (Math.random() < 0.07) continue; // an empty seat
+        c.fillStyle = pick(shirts);
+        c.fillRect(x - r * 1.15, y + r * 0.7, r * 2.3, r * 2.4);
+        c.fillStyle = pick(skins);
+        c.beginPath();
+        c.arc(x, y, r, 0, Math.PI * 2);
+        c.fill();
+      }
+      y += r * 2.9;
+    }
+    c.globalAlpha = 1;
+  }
+
+  /** Advertising boards, the grass around the court, the court and its lines. */
+  private paintCourt(): void {
     const c = this.ctx;
     const { w, h } = this;
-    const hy = h * 0.3; // horizon
-    const sky = c.createLinearGradient(0, 0, 0, hy);
-    sky.addColorStop(0, '#0b1320');
-    sky.addColorStop(1, '#1d3557');
-    c.fillStyle = sky;
-    c.fillRect(0, 0, w, hy);
-    // stands behind the far end
-    const back = this.at({ x: 0, y: 0, z: LENGTH + 8 });
-    c.fillStyle = '#14233a';
-    c.fillRect(0, hy - h * 0.05, w, back.y - hy + h * 0.05);
-    c.fillStyle = '#1f7a4d';
-    c.fillRect(0, back.y, w, h - back.y);
-
     const z0 = CAM_Z + 0.6; // the court runs under the camera
+    // grass from the boards to the camera, mown in stripes
+    for (let z = z0, i = 0; z < BOARD_Z; z += 2.4, i++) {
+      const z1 = Math.min(BOARD_Z, z + 2.4);
+      this.quad(
+        [
+          { x: -60, y: 0, z },
+          { x: 60, y: 0, z },
+          { x: 60, y: 0, z: z1 },
+          { x: -60, y: 0, z: z1 },
+        ],
+        i % 2 ? '#1c6e45' : '#218050',
+      );
+    }
+    // boards along the back
+    const bt = this.at({ x: 0, y: BOARD_H, z: BOARD_Z }).y;
+    const bb = this.at({ x: 0, y: 0, z: BOARD_Z }).y;
+    const bh = bb - bt;
+    c.fillStyle = '#0b1a2e';
+    c.fillRect(0, bt, w, bh);
+    const panels = ['#1d4e89', '#0f7b6c', '#7a2a5c'];
+    const pw = w / 5;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = `800 ${Math.max(8, Math.round(bh * 0.55))}px system-ui, sans-serif`;
+    for (let i = 0; i < 5; i++) {
+      c.fillStyle = panels[i % panels.length]!;
+      c.fillRect(i * pw + 2, bt + 2, pw - 4, bh - 4);
+      c.fillStyle = 'rgba(255,255,255,0.85)';
+      c.fillText(i % 2 ? 'SWING · HIT · WIN' : 'GYRO OPEN', i * pw + pw / 2, bt + bh / 2 + 1);
+    }
+
+    const court = [
+      { x: -DOUBLES_W - 0.6, y: 0, z: z0 },
+      { x: DOUBLES_W + 0.6, y: 0, z: z0 },
+      { x: DOUBLES_W + 0.6, y: 0, z: LENGTH + 2 },
+      { x: -DOUBLES_W - 0.6, y: 0, z: LENGTH + 2 },
+    ];
+    this.quad(court, '#235aa0');
+    c.save();
+    c.clip();
+    // the floodlights make the middle of the court brightest
+    const mid = this.at({ x: 0, y: 0, z: NET_Z * 0.8 });
+    const lit = c.createRadialGradient(mid.x, mid.y, 0, mid.x, mid.y, Math.max(w, h) * 0.7);
+    lit.addColorStop(0, 'rgba(140,190,255,0.28)');
+    lit.addColorStop(1, 'rgba(0,10,30,0.25)');
+    c.fillStyle = lit;
+    c.fillRect(0, 0, w, h);
+    // a fine grain in the hard court
+    for (let i = 0; i < 2500; i++) {
+      c.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,30,0.08)';
+      c.fillRect(rand(0, w), rand(mid.y - h * 0.2, h), 1.5, 1.5);
+    }
+    c.restore();
+
+    // Lines are painted strips of real width, so they thin out with distance, with a soft glow.
+    c.shadowColor = 'rgba(255,255,255,0.55)';
+    c.shadowBlur = 5;
+    const white = 'rgba(255,255,255,0.95)';
+    const along = (x: number, za: number, zb: number, wd = 0.05) =>
+      this.quad(
+        [
+          { x: x - wd, y: 0, z: za },
+          { x: x + wd, y: 0, z: za },
+          { x: x + wd, y: 0, z: zb },
+          { x: x - wd, y: 0, z: zb },
+        ],
+        white,
+      );
+    const across = (z: number, xa: number, xb: number, wd = 0.05) =>
+      this.quad(
+        [
+          { x: xa, y: 0, z: z - wd },
+          { x: xb, y: 0, z: z - wd },
+          { x: xb, y: 0, z: z + wd },
+          { x: xa, y: 0, z: z + wd },
+        ],
+        white,
+      );
+    for (const x of [-HALF_W, HALF_W, -DOUBLES_W, DOUBLES_W]) along(x, z0, LENGTH);
+    across(0, -DOUBLES_W, DOUBLES_W, 0.1);
+    across(LENGTH, -DOUBLES_W, DOUBLES_W, 0.1);
+    for (const z of [NET_Z - SERVICE, NET_Z + SERVICE]) across(z, -HALF_W, HALF_W);
+    along(0, NET_Z - SERVICE, NET_Z + SERVICE);
+    along(0, 0, 0.3);
+    along(0, LENGTH - 0.3, LENGTH);
+    c.shadowBlur = 0;
+    // the net's shadow, cast towards the player by the lights behind it
     this.quad(
       [
-        { x: -DOUBLES_W, y: 0, z: z0 },
-        { x: DOUBLES_W, y: 0, z: z0 },
-        { x: DOUBLES_W, y: 0, z: LENGTH },
-        { x: -DOUBLES_W, y: 0, z: LENGTH },
+        { x: -DOUBLES_W - 0.9, y: 0, z: NET_Z },
+        { x: DOUBLES_W + 0.9, y: 0, z: NET_Z },
+        { x: DOUBLES_W + 0.9, y: 0, z: NET_Z - 0.7 },
+        { x: -DOUBLES_W - 0.9, y: 0, z: NET_Z - 0.7 },
       ],
-      '#2a66b0',
+      'rgba(5,15,35,0.3)',
     );
-    c.strokeStyle = 'rgba(255,255,255,0.9)';
-    c.lineWidth = 3;
-    // singles sidelines (the ones that count) and the doubles alleys outside them
-    for (const x of [-HALF_W, HALF_W]) this.line({ x, y: 0, z: z0 }, { x, y: 0, z: LENGTH });
-    for (const x of [-DOUBLES_W, DOUBLES_W]) this.line({ x, y: 0, z: z0 }, { x, y: 0, z: LENGTH });
-    for (const z of [0, LENGTH]) this.line({ x: -DOUBLES_W, y: 0, z }, { x: DOUBLES_W, y: 0, z });
-    for (const z of [NET_Z - SERVICE, NET_Z + SERVICE]) this.line({ x: -HALF_W, y: 0, z }, { x: HALF_W, y: 0, z });
-    this.line({ x: 0, y: 0, z: NET_Z - SERVICE }, { x: 0, y: 0, z: NET_Z + SERVICE });
-    // centre marks on the baselines
-    this.line({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0.3 });
-    this.line({ x: 0, y: 0, z: LENGTH - 0.3 }, { x: 0, y: 0, z: LENGTH });
+  }
+
+  /** Light from the floodlights falling over the scene, and a vignette at the edges. */
+  private paintLights(): void {
+    const c = this.ctx;
+    const { w, h } = this;
+    const top = this.standsTop - 6;
+    for (const k of [0.12, 0.88]) {
+      const x = w * k;
+      const cone = c.createLinearGradient(0, top, 0, h);
+      cone.addColorStop(0, 'rgba(255,248,215,0.09)');
+      cone.addColorStop(1, 'rgba(255,248,215,0)');
+      c.fillStyle = cone;
+      c.beginPath();
+      c.moveTo(x - 10, top);
+      c.lineTo(x + 10, top);
+      c.lineTo(w / 2 + (x - w / 2) * 0.2 + w * 0.12, h);
+      c.lineTo(w / 2 + (x - w / 2) * 0.2 - w * 0.12, h);
+      c.closePath();
+      c.fill();
+    }
+    const v = c.createRadialGradient(w / 2, h * 0.55, Math.min(w, h) * 0.35, w / 2, h * 0.55, Math.max(w, h) * 0.8);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,8,0.5)');
+    c.fillStyle = v;
+    c.fillRect(0, 0, w, h);
   }
 
   /**
@@ -660,9 +899,9 @@ export class TennisGame implements Scene {
       { x: tg.x + TARGET, y: 0, z: tg.z + TARGET },
       { x: tg.x - TARGET, y: 0, z: tg.z + TARGET },
     ];
-    this.quad(corners, `rgba(255,209,102,${0.14 + 0.12 * pulse})`);
-    c.strokeStyle = `rgba(255,209,102,${0.5 + 0.4 * pulse})`;
-    c.lineWidth = 2;
+    this.quad(corners, `rgba(255,209,102,${0.28 + 0.17 * pulse})`);
+    c.strokeStyle = `rgba(255,209,102,${0.7 + 0.3 * pulse})`;
+    c.lineWidth = 3;
     for (let i = 0; i < 4; i++) this.line(corners[i]!, corners[(i + 1) % 4]!);
   }
 
@@ -679,77 +918,130 @@ export class TennisGame implements Scene {
     }
   }
 
-  private net(): void {
+  private paintNet(): void {
     const c = this.ctx;
     const x = DOUBLES_W + 0.9;
     const a = this.at({ x: -x, y: NET_H, z: NET_Z });
     const b = this.at({ x, y: 0, z: NET_Z });
-    c.fillStyle = 'rgba(10,20,35,0.45)';
+    const mesh = c.createLinearGradient(0, a.y, 0, b.y);
+    mesh.addColorStop(0, 'rgba(10,20,35,0.35)');
+    mesh.addColorStop(1, 'rgba(10,20,35,0.6)');
+    c.fillStyle = mesh;
     c.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
-    c.strokeStyle = 'rgba(255,255,255,0.18)';
+    c.strokeStyle = 'rgba(255,255,255,0.16)';
     c.lineWidth = 1;
     c.beginPath();
-    for (let i = 1; i < 40; i++) {
-      const px = a.x + ((b.x - a.x) * i) / 40;
+    for (let i = 1; i < 60; i++) {
+      const px = a.x + ((b.x - a.x) * i) / 60;
       c.moveTo(px, a.y);
       c.lineTo(px, b.y);
     }
-    for (let i = 1; i < 4; i++) {
-      const py = a.y + ((b.y - a.y) * i) / 4;
+    for (let i = 1; i < 6; i++) {
+      const py = a.y + ((b.y - a.y) * i) / 6;
       c.moveTo(a.x, py);
       c.lineTo(b.x, py);
     }
     c.stroke();
-    c.fillStyle = '#fff';
-    c.fillRect(a.x, a.y - 2, b.x - a.x, 4);
-    c.fillRect((a.x + b.x) / 2 - 2, a.y, 4, b.y - a.y); // centre strap
-    c.fillStyle = '#c9d1d9';
-    c.fillRect(a.x - 3, a.y - 4, 5, b.y - a.y + 4);
-    c.fillRect(b.x - 2, a.y - 4, 5, b.y - a.y + 4);
+    // white tape with a soft highlight, and the centre strap
+    c.fillStyle = '#f4f7fb';
+    c.fillRect(a.x, a.y - 3, b.x - a.x, 6);
+    c.fillStyle = 'rgba(0,0,0,0.18)';
+    c.fillRect(a.x, a.y + 1, b.x - a.x, 2);
+    c.fillStyle = '#f4f7fb';
+    c.fillRect((a.x + b.x) / 2 - 2, a.y, 4, b.y - a.y);
+    // posts, lit from the front
+    for (const px of [a.x - 4, b.x - 3]) {
+      const post = c.createLinearGradient(px, 0, px + 7, 0);
+      post.addColorStop(0, '#5c6b7a');
+      post.addColorStop(0.5, '#dfe6ee');
+      post.addColorStop(1, '#4a5866');
+      c.fillStyle = post;
+      c.fillRect(px, a.y - 6, 7, b.y - a.y + 6);
+    }
   }
 
-  /** The computer player at the far end. */
+  /** The computer player at the far end: runs with a stride, swings after each hit, tosses to serve. */
   private player(): void {
     const c = this.ctx;
     const foot = this.at({ x: this.cpu.x, y: 0, z: CPU_Z });
     const s = foot.s;
-    c.fillStyle = 'rgba(0,0,0,0.3)';
+    const fx = foot.x;
+    const fy = foot.y;
+    const run = clamp(this.cpuRun / CPU_SPEED, 0, 1);
+    const stride = Math.sin(this.cpuStep) * 0.2 * run * s;
+    const bob = Math.abs(Math.sin(this.cpuStep)) * 0.06 * run * s;
+    const lean = (this.cpuDir * run * 0.12) * s; // leans into the run
+    c.fillStyle = 'rgba(0,0,10,0.35)';
     c.beginPath();
-    c.ellipse(foot.x, foot.y, 0.45 * s, 0.12 * s, 0, 0, Math.PI * 2);
+    c.ellipse(fx, fy, 0.5 * s, 0.13 * s, 0, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = '#ff8fab';
     c.lineCap = 'round';
-    c.lineWidth = Math.max(3, 0.34 * s);
+    const hip = { x: fx + lean * 0.3, y: fy - 0.85 * s - bob };
+    const shoulder = { x: fx + lean, y: fy - 1.4 * s - bob };
+    // legs and shoes
+    c.strokeStyle = '#f0c9a0';
+    c.lineWidth = Math.max(2, 0.12 * s);
     c.beginPath();
-    c.moveTo(foot.x, foot.y - 0.5 * s);
-    c.lineTo(foot.x, foot.y - 1.35 * s);
+    c.moveTo(hip.x - 0.09 * s, hip.y);
+    c.lineTo(fx - 0.15 * s + stride, fy - 0.05 * s);
+    c.moveTo(hip.x + 0.09 * s, hip.y);
+    c.lineTo(fx + 0.15 * s - stride, fy - 0.05 * s);
     c.stroke();
-    c.lineWidth = Math.max(2, 0.14 * s);
+    c.fillStyle = '#ffffff';
+    for (const dx of [-0.15 * s + stride, 0.15 * s - stride]) {
+      c.beginPath();
+      c.ellipse(fx + dx, fy - 0.03 * s, 0.08 * s, 0.045 * s, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    // shorts and shirt
+    c.fillStyle = '#1d3557';
     c.beginPath();
-    c.moveTo(foot.x - 0.16 * s, foot.y);
-    c.lineTo(foot.x - 0.1 * s, foot.y - 0.6 * s);
-    c.moveTo(foot.x + 0.16 * s, foot.y);
-    c.lineTo(foot.x + 0.1 * s, foot.y - 0.6 * s);
-    c.stroke();
-    c.fillStyle = '#ffd9b3';
-    c.beginPath();
-    c.arc(foot.x, foot.y - 1.62 * s, 0.17 * s, 0, Math.PI * 2);
+    c.roundRect(hip.x - 0.2 * s, hip.y - 0.14 * s, 0.4 * s, 0.3 * s, 0.05 * s);
     c.fill();
+    const shirt = c.createLinearGradient(shoulder.x - 0.25 * s, 0, shoulder.x + 0.25 * s, 0);
+    shirt.addColorStop(0, '#ff8fab');
+    shirt.addColorStop(1, '#d9577a');
+    c.fillStyle = shirt;
+    c.beginPath();
+    c.roundRect(shoulder.x - 0.24 * s, shoulder.y - 0.06 * s, 0.48 * s, 0.62 * s, 0.1 * s);
+    c.fill();
+    // free arm, swinging against the stride
+    c.strokeStyle = '#f0c9a0';
+    c.lineWidth = Math.max(2, 0.09 * s);
+    c.beginPath();
+    c.moveTo(shoulder.x - 0.2 * s, shoulder.y + 0.04 * s);
+    c.lineTo(shoulder.x - 0.32 * s - stride * 0.6, shoulder.y + 0.55 * s);
+    c.stroke();
+    // head with a white cap
+    const head = { x: shoulder.x, y: shoulder.y - 0.24 * s };
+    c.fillStyle = '#f0c9a0';
+    c.beginPath();
+    c.arc(head.x, head.y, 0.16 * s, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#f4f7fb';
+    c.beginPath();
+    c.arc(head.x, head.y - 0.02 * s, 0.17 * s, Math.PI, 0);
+    c.fill();
+    c.fillRect(head.x - 0.17 * s, head.y - 0.04 * s, 0.34 * s, 0.05 * s);
     // racket arm: swings forward for a moment after each hit
     // and reaches up behind the ball during the toss
     const ang = this.toss > 0 ? -1.2 - this.toss * 0.6 : -0.5 - (this.cpu.swing / 0.3) * 1.6;
-    const hx = foot.x + 0.25 * s + Math.cos(ang) * 0.7 * s;
-    const hyy = foot.y - 1.2 * s + Math.sin(ang) * 0.7 * s;
-    c.strokeStyle = '#ffd9b3';
-    c.lineWidth = Math.max(2, 0.1 * s);
+    const sx = shoulder.x + 0.2 * s;
+    const sy = shoulder.y + 0.05 * s;
+    const hx = sx + Math.cos(ang) * 0.6 * s;
+    const hy = sy + Math.sin(ang) * 0.6 * s;
     c.beginPath();
-    c.moveTo(foot.x + 0.15 * s, foot.y - 1.2 * s);
-    c.lineTo(hx, hyy);
+    c.moveTo(sx, sy);
+    c.lineTo(hx, hy);
     c.stroke();
+    const rx = hx + Math.cos(ang) * 0.27 * s;
+    const ry = hy + Math.sin(ang) * 0.27 * s;
+    c.fillStyle = 'rgba(255,255,255,0.2)';
+    c.beginPath();
+    c.ellipse(rx, ry, 0.2 * s, 0.25 * s, ang + Math.PI / 2, 0, Math.PI * 2);
+    c.fill();
     c.strokeStyle = '#ff9f1c';
     c.lineWidth = Math.max(1.5, 0.05 * s);
-    c.beginPath();
-    c.arc(hx + Math.cos(ang) * 0.25 * s, hyy + Math.sin(ang) * 0.25 * s, 0.25 * s, 0, Math.PI * 2);
     c.stroke();
     c.lineCap = 'butt';
   }
@@ -800,15 +1092,26 @@ export class TennisGame implements Scene {
       c.arc(p.x, p.y, r * 1.8, 0, Math.PI * 2);
       c.fill();
     }
-    c.fillStyle = '#e6ff5a';
+    // felt lit from above-left, with a darker rim
+    const felt = c.createRadialGradient(p.x - r * 0.35, p.y - r * 0.4, r * 0.1, p.x, p.y, r);
+    felt.addColorStop(0, '#fbffc4');
+    felt.addColorStop(0.55, '#dff53f');
+    felt.addColorStop(1, '#93a816');
+    c.fillStyle = felt;
     c.beginPath();
     c.arc(p.x, p.y, r, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = 'rgba(255,255,255,0.8)';
+    // the seam turns as the ball flies
+    const spin = this.time * 9;
+    c.save();
+    c.clip();
+    c.strokeStyle = 'rgba(255,255,255,0.85)';
     c.lineWidth = Math.max(1, r * 0.14);
     c.beginPath();
-    c.arc(p.x - r * 0.9, p.y, r, -0.9, 0.9);
+    c.arc(p.x - r * 0.9 * Math.cos(spin), p.y, r, -0.9, 0.9);
+    c.arc(p.x + r * 0.9 * Math.cos(spin), p.y, r, Math.PI - 0.9, Math.PI + 0.9);
     c.stroke();
+    c.restore();
   }
 
   private racket(): void {
@@ -829,10 +1132,29 @@ export class TennisGame implements Scene {
     c.save();
     c.translate(this.pen.x, this.pen.y);
     c.rotate(clamp(this.swing().vx / 8, -0.7, 0.7));
-    c.fillStyle = '#3a2a1a';
-    c.fillRect(-r * 0.09, r * 0.95, r * 0.18, r * 1.1);
+    c.globalAlpha = 0.9; // a little see-through, so the ball behind it stays visible
+    // throat (the V under the head), shaft and taped grip
+    c.strokeStyle = '#ff9f1c';
+    c.lineWidth = Math.max(3, r * 0.08);
+    c.beginPath();
+    c.moveTo(-r * 0.45, r * 0.83);
+    c.lineTo(0, r * 1.3);
+    c.lineTo(r * 0.45, r * 0.83);
+    c.stroke();
+    c.fillStyle = '#2b2f3a';
+    c.fillRect(-r * 0.08, r * 1.2, r * 0.16, r * 0.35);
     c.fillStyle = '#e63946';
-    c.fillRect(-r * 0.11, r * 1.45, r * 0.22, r * 0.62);
+    c.fillRect(-r * 0.11, r * 1.5, r * 0.22, r * 0.7);
+    c.strokeStyle = 'rgba(0,0,0,0.3)';
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let k = 0; k < 6; k++) {
+      c.moveTo(-r * 0.11, r * (1.55 + k * 0.11));
+      c.lineTo(r * 0.11, r * (1.5 + k * 0.11));
+    }
+    c.stroke();
+    c.fillStyle = '#2b2f3a';
+    c.fillRect(-r * 0.13, r * 2.17, r * 0.26, r * 0.08);
     c.beginPath();
     c.ellipse(0, 0, r * 0.8, r, 0, 0, Math.PI * 2);
     c.fillStyle = this.flash > 0 ? 'rgba(230,255,90,0.35)' : 'rgba(255,255,255,0.08)';
@@ -850,10 +1172,19 @@ export class TennisGame implements Scene {
     }
     c.stroke();
     c.restore();
-    c.strokeStyle = '#ff9f1c';
-    c.lineWidth = Math.max(4, r * 0.1);
+    // frame: a dark edge under a bright face, so it reads against both court and crowd
     c.beginPath();
     c.ellipse(0, 0, r * 0.8, r, 0, 0, Math.PI * 2);
+    c.strokeStyle = '#1b1f29';
+    c.lineWidth = Math.max(6, r * 0.16);
+    c.stroke();
+    c.strokeStyle = '#ff9f1c';
+    c.lineWidth = Math.max(4, r * 0.1);
+    c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.45)';
+    c.lineWidth = Math.max(1, r * 0.03);
+    c.beginPath();
+    c.ellipse(0, 0, r * 0.8, r, 0, Math.PI * 1.1, Math.PI * 1.6);
     c.stroke();
     c.restore();
   }
@@ -867,6 +1198,12 @@ export class TennisGame implements Scene {
       const mx = w / 2;
       const my = h * 0.255; // on the dark stands, clear of the court lines
       c.textAlign = 'center';
+      // a dark panel so the text reads over the crowd
+      const pw = Math.min(w - 32, 680);
+      c.fillStyle = 'rgba(5,10,20,0.72)';
+      c.beginPath();
+      c.roundRect(mx - pw / 2, my - 24, pw, 108, 14);
+      c.fill();
       c.fillStyle = 'rgba(255,255,255,0.9)';
       c.font = '600 22px system-ui, sans-serif';
       c.fillText('Press Start, then swing at the ball', mx, my);
