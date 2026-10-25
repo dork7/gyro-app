@@ -27,6 +27,7 @@ Small games that run in the browser on your laptop and use **your phone's motion
 | 8 | 🎱 **Marble Maze** | Hold the phone flat like a tray and tilt it to roll a marble through the maze |
 | 9 | ✈️ **Sky Rings** | Hold the phone like an aircraft yoke: turn to bank, pull back to climb, fly through the rings |
 | 0 | 🐍 **Gyro Snake** | Hold the phone flat and tip it toward where the snake should go |
+| − | 🪐 **Orbit Defender** | Hold the phone flat and twist it like a dial to swing a cannon round your planet |
 
 ```
 phone (/pad page)  ──WebSocket──▶  Node server (rooms)  ──WebSocket──▶  laptop (games)
@@ -63,20 +64,20 @@ npm run dev
 1. Open **https://localhost:5566** on the laptop (accept the certificate warning once).
 2. Scan the QR code with your phone. Phone and laptop must be on the **same Wi-Fi**.
 3. On the phone, accept the certificate warning, then tap **Enable motion** (iPhone shows a permission prompt).
-4. Pick a game on the laptop (click a card, or keys `1`–`9` and `0`) or on the phone.
+4. Pick a game on the laptop (click a card, or keys `1`–`9`, `0` and `-`) or on the phone.
 
 ### Changing game
 
 | Where | How |
 |---|---|
-| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow, `7` Tennis, `8` Marble Maze, `9` Sky Rings, `0` Gyro Snake. **Resume** / `Esc` / `H` closes it. |
+| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow, `7` Tennis, `8` Marble Maze, `9` Sky Rings, `0` Gyro Snake, `-` Orbit Defender. **Resume** / `Esc` / `H` closes it. |
 | Phone | **☰ Choose game** button (bottom of the controller, also **☰ Menu** at the top) opens the same menu on the laptop and shows the game buttons |
 
 ### Controls
 
 | Control | Action |
 |---|---|
-| Phone: Centre | Set the current pose as "neutral" (sword centre, straight wheel, standing tall, level tray, level flight, level phone) |
+| Phone: Centre | Set the current pose as "neutral" (sword centre, straight wheel, standing tall, level tray, level flight, level phone, cannon up) |
 | Phone: Start / Pause | Start, play again, pause, resume |
 | Phone: Sensitivity | Smaller movement for the same effect (jump: easier to trigger) |
 | Laptop `Space` / `Enter` | Start (in Jump Run, also jumps) |
@@ -112,6 +113,8 @@ Each pose must be held for 8 seconds and held **still**; if you wobble, progress
 
 **Gyro Snake.** Hold the phone flat, screen up, top edge pointing at the screen, press **Level phone**, then **Start**. Tip the phone toward where the snake should go: forward is up, toward you is down. Only the stronger tilt counts, and once it has turned you can level the phone again. The indicator in the corner shows your tilt and the direction it asks for. 🍎 are 10 points; every fifth apple a ⭐ appears for 6 seconds, worth 50 and three extra segments. The snake speeds up as it grows; walls and its own tail end the run. Without a phone, use the arrow keys.
 
+**Orbit Defender.** Hold the phone flat like a dial, top edge pointing at the screen, press **Centre cannon** (the cannon then points up), then **Start**. Twist the phone to swing the cannon round the planet: a quarter turn of the wrist each way covers the whole circle, or turn on the spot for finer aim. The cannon fires by itself, and the glowing shield arc in front of it stops meteors that get through (2 points). Shot meteors are 10; big rocks take three hits, are worth 30 and split in two. Shoot a ⚡ for six seconds of triple rapid fire. Three hits on the planet end the run. It uses the phone's compass heading, which can drift on some phones: press **Centre cannon** again if the aim wanders. Without a phone, the mouse aims (or the left/right arrow keys).
+
 ## Scripts
 
 | Command | What it does |
@@ -140,8 +143,8 @@ Phone browsers only give web pages motion-sensor access on HTTPS. The server cre
 ## How it works
 
 - **`server/`**: HTTPS server, Vite dev middleware, and `rooms.ts`, which pairs one laptop with one phone per 4-letter room code and relays messages. Reconnection is built in on both sides; the laptop keeps its room code across refreshes.
-- **`src/shared/`**: code used by both sides: the message types (`protocol.ts`), orientation maths (`pointer.ts`), the jump detector (`jump.ts`) the yoga pose maths (`yoga.ts`) the marble maze physics (`marble.ts`) the flight yoke and ring course (`flight.ts`) and the snake rules (`snake.ts`). All of it is unit-tested.
-- **`src/game/`**: one file per game (`game.ts` = Fruit Slicer, `car.ts`, `jump.ts`, `yoga.ts`, `maze.ts`, `sky.ts`, `snake.ts`, …) behind a shared `Scene` interface, plus `main.ts` that connects them to the network.
+- **`src/shared/`**: code used by both sides: the message types (`protocol.ts`), orientation maths (`pointer.ts`), the jump detector (`jump.ts`) the yoga pose maths (`yoga.ts`) the marble maze physics (`marble.ts`) the flight yoke and ring course (`flight.ts`) the snake rules (`snake.ts`) and the orbit cannon and meteor pacing (`orbit.ts`). All of it is unit-tested.
+- **`src/game/`**: one file per game (`game.ts` = Fruit Slicer, `car.ts`, `jump.ts`, `yoga.ts`, `maze.ts`, `sky.ts`, `snake.ts`, `orbit.ts`, …) behind a shared `Scene` interface, plus `main.ts` that connects them to the network.
 - **`src/pad/`**: the phone page: permission flow, sensor streaming, jump detection, buttons, wake lock, vibration feedback (Android only).
 
 Jump detection runs **on the phone**: it watches the accelerometer for the take-off spike (about 2 g at default sensitivity) or a short free-fall, and only sends a tiny "jump" message.

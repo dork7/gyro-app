@@ -6,6 +6,7 @@ import { CarGame } from './car';
 import { Game } from './game';
 import { JumpGame } from './jump';
 import { MazeGame } from './maze';
+import { OrbitGame } from './orbit';
 import { PhonicsGame } from './phonics';
 import { SkyGame } from './sky';
 import { SnakeGame } from './snake';
@@ -41,6 +42,7 @@ const tennis = new TennisGame(canvas, sfx, hooks);
 const maze = new MazeGame(canvas, sfx, hooks);
 const sky = new SkyGame(canvas, sfx, hooks);
 const snake = new SnakeGame(canvas, sfx, hooks);
+const orbit = new OrbitGame(canvas, sfx, hooks);
 
 // ---------------------------------------------------------------- which game is showing
 let mode: GameId = 'home';
@@ -52,7 +54,7 @@ function setMode(next: GameId): void {
   resetMenuUi();
   mode = next;
   document.body.dataset.mode = next;
-  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : next === 'phonics' ? phonics : next === 'tennis' ? tennis : next === 'maze' ? maze : next === 'sky' ? sky : next === 'snake' ? snake : null;
+  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : next === 'phonics' ? phonics : next === 'tennis' ? tennis : next === 'maze' ? maze : next === 'sky' ? sky : next === 'snake' ? snake : next === 'orbit' ? orbit : null;
   $('home').hidden = next !== 'home';
   $('title').querySelector('h1')!.textContent = scene?.title ?? 'Gyro Arcade';
   $('title').querySelector('p')!.textContent = scene?.subtitle ?? 'Pick a game. Your phone is the controller.';
@@ -135,6 +137,7 @@ const net: HostConnection = new HostConnection({
       maze.padLost();
       sky.padLost();
       snake.padLost();
+      orbit.padLost();
     }
     if (!on && scene?.state === 'playing') toast('Phone disconnected: reconnecting…');
     if (on) hideToast();
@@ -164,6 +167,10 @@ const net: HostConnection = new HostConnection({
       snake.setOrientation(s, now);
       return;
     }
+    if (mode === 'orbit') {
+      orbit.setOrientation(s, now);
+      return;
+    }
     latest = aim(s);
     if (!mapper.hasCenter) mapper.setCenter(latest);
     if (mode === 'fruit' && !menuOpen) {
@@ -190,6 +197,7 @@ const net: HostConnection = new HostConnection({
       else if (mode === 'maze') maze.calibrate();
       else if (mode === 'sky') sky.calibrate();
       else if (mode === 'snake') snake.calibrate();
+      else if (mode === 'orbit') orbit.calibrate();
       else if (latest) mapper.setCenter(latest);
     } else if (name === 'start') scene?.requestStart();
     else if (name === 'pause') scene?.togglePause();
@@ -201,6 +209,7 @@ const net: HostConnection = new HostConnection({
     maze.setSensitivity(sens);
     sky.setSensitivity(sens);
     snake.setSensitivity(sens);
+    orbit.setSensitivity(sens);
   },
   onPedal(gas, brake) {
     car.setPedals(gas, brake);
@@ -208,7 +217,7 @@ const net: HostConnection = new HostConnection({
   onSelect(game) {
     sfx.unlock();
     if (game === 'home') openMenu();
-    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis' || game === 'maze' || game === 'sky' || game === 'snake') choose(game);
+    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis' || game === 'maze' || game === 'sky' || game === 'snake' || game === 'orbit') choose(game);
   },
   onJump(strength) {
     sfx.unlock();
@@ -238,11 +247,12 @@ async function renderQr(room: string): Promise<void> {
 
 // ---------------------------------------------------------------- mouse and keyboard
 window.addEventListener('pointermove', (e) => {
-  if ((mode !== 'fruit' && mode !== 'write' && mode !== 'phonics' && mode !== 'tennis') || menuOpen) return;
+  if ((mode !== 'fruit' && mode !== 'write' && mode !== 'phonics' && mode !== 'tennis' && mode !== 'orbit') || menuOpen) return;
   if (performance.now() - lastPadSample < 1500) return; // phone wins while it is streaming
   if (mode === 'write') write.penMove(e.clientX, e.clientY, performance.now());
   else if (mode === 'phonics') phonics.penMove(e.clientX, e.clientY, performance.now());
   else if (mode === 'tennis') tennis.racketMove(e.clientX, e.clientY, performance.now());
+  else if (mode === 'orbit') orbit.aimAt(e.clientX, e.clientY);
   else fruit.pointerMove(e.clientX, e.clientY, performance.now());
 });
 window.addEventListener('pointerdown', (e) => {
@@ -258,6 +268,7 @@ window.addEventListener('keydown', (e) => {
     if (mode === 'maze') maze.keyDown(e.code);
     if (mode === 'sky') sky.keyDown(e.code);
     if (mode === 'snake') snake.keyDown(e.code);
+    if (mode === 'orbit') orbit.keyDown(e.code);
   }
   if (e.repeat) {
     if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
@@ -273,6 +284,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit8') choose('maze');
   else if (e.code === 'Digit9') choose('sky');
   else if (e.code === 'Digit0') choose('snake');
+  else if (e.code === 'Minus') choose('orbit');
   else if (e.code === 'KeyH') toggleMenu();
   else if (e.code === 'Escape' && menuOpen) closeMenu();
   else if (menuOpen) {
@@ -285,6 +297,7 @@ window.addEventListener('keydown', (e) => {
     else if (mode === 'maze') maze.calibrate();
     else if (mode === 'sky') sky.calibrate();
     else if (mode === 'snake') snake.calibrate();
+    else if (mode === 'orbit') orbit.calibrate();
     else if (latest) mapper.setCenter(latest);
   } else if (e.code === 'KeyM') sfx.muted = !sfx.muted;
   else if (e.code === 'KeyV' && mode === 'phonics') phonics.nextVoice();
@@ -297,6 +310,7 @@ window.addEventListener('keyup', (e) => {
   yoga.keyUp(e.code);
   maze.keyUp(e.code);
   sky.keyUp(e.code);
+  orbit.keyUp(e.code);
 });
 window.addEventListener('blur', () => {
   for (const k of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD']) car.keyUp(k);
@@ -347,6 +361,6 @@ function loop(t: number): void {
 requestAnimationFrame(loop);
 
 // Handy for debugging from the browser console (and used by the automated test).
-Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __phonics: phonics, __tennis: tennis, __maze: maze, __sky: sky, __snake: snake, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
+Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __phonics: phonics, __tennis: tennis, __maze: maze, __sky: sky, __snake: snake, __orbit: orbit, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
 
 setMode('home');

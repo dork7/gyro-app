@@ -220,7 +220,7 @@ function renderInfo(): void {
   $('jumpCtl').hidden = game !== 'jump';
   $('homeBtn').hidden = home || $('controls').hidden;
   $('gamesBtn').hidden = home || $('controls').hidden;
-  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : game === 'maze' ? 'Level tray' : game === 'sky' ? 'Level flight' : game === 'snake' ? 'Level phone' : 'Centre';
+  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : game === 'maze' ? 'Level tray' : game === 'sky' ? 'Level flight' : game === 'snake' ? 'Level phone' : game === 'orbit' ? 'Centre cannon' : 'Centre';
 
   const ready =
     game === 'car'
@@ -241,11 +241,13 @@ function renderInfo(): void {
                     ? 'Hold the phone like a wheel, Level flight, then Start'
                     : game === 'snake'
                       ? 'Hold the phone flat, screen up, Level phone, then Start and tip to steer'
+                      : game === 'orbit'
+                        ? 'Hold the phone flat, Centre cannon, then Start and twist to aim'
             : 'Slice the watermelon or press Start';
   const lines = home
     ? ['Choose a game (or pick the current one to resume)']
     : gameState === 'playing'
-      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : game === 'phonics' ? 'Sounds left' : game === 'maze' ? 'Marbles' : game === 'sky' ? 'Planes' : game === 'snake' ? 'Length' : 'Lives'} ${info.lives}`]
+      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : game === 'phonics' ? 'Sounds left' : game === 'maze' ? 'Marbles' : game === 'sky' ? 'Planes' : game === 'snake' ? 'Length' : game === 'orbit' ? 'Shields' : 'Lives'} ${info.lives}`]
       : gameState === 'over'
         ? [`Game over: ${info.score}  (best ${info.best})`]
         : gameState === 'paused'
