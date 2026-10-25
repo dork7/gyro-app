@@ -303,6 +303,8 @@ body[data-mode='write'] #pair li[data-for='write'],
 body[data-mode='phonics'] #pair li[data-for='phonics'],
 body[data-mode='tennis'] #pair li[data-for='tennis'],
 body[data-mode='maze'] #pair li[data-for='maze'],
+body[data-mode='sky'] #pair li[data-for='sky'],
+body[data-mode='snake'] #pair li[data-for='snake'],
 body[data-mode='jump'] #pair li[data-for='jump'] {
   display: list-item;
 }

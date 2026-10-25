@@ -25,6 +25,8 @@ Small games that run in the browser on your laptop and use **your phone's motion
 | 4 | 🧘 **Yoga Flow** | Phone against your chest, move through five poses and hold them still |
 | 7 | 🎾 **Tennis** | Swing the phone like a racket; put it on the ball and hit it back over the net |
 | 8 | 🎱 **Marble Maze** | Hold the phone flat like a tray and tilt it to roll a marble through the maze |
+| 9 | ✈️ **Sky Rings** | Hold the phone like an aircraft yoke: turn to bank, pull back to climb, fly through the rings |
+| 0 | 🐍 **Gyro Snake** | Hold the phone flat and tip it toward where the snake should go |
 
 ```
 phone (/pad page)  ──WebSocket──▶  Node server (rooms)  ──WebSocket──▶  laptop (games)
@@ -61,20 +63,20 @@ npm run dev
 1. Open **https://localhost:5566** on the laptop (accept the certificate warning once).
 2. Scan the QR code with your phone. Phone and laptop must be on the **same Wi-Fi**.
 3. On the phone, accept the certificate warning, then tap **Enable motion** (iPhone shows a permission prompt).
-4. Pick a game on the laptop (click a card, or keys `1`–`8`) or on the phone.
+4. Pick a game on the laptop (click a card, or keys `1`–`9` and `0`) or on the phone.
 
 ### Changing game
 
 | Where | How |
 |---|---|
-| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow, `7` Tennis, `8` Marble Maze. **Resume** / `Esc` / `H` closes it. |
+| Laptop | **☰ Menu** button (top right) or `H` opens the game menu on top of the current game; it pauses the game. Click a card or press `1` Fruit Slicer, `2` Racer, `3` Jump Run, `4` Yoga Flow, `7` Tennis, `8` Marble Maze, `9` Sky Rings, `0` Gyro Snake. **Resume** / `Esc` / `H` closes it. |
 | Phone | **☰ Choose game** button (bottom of the controller, also **☰ Menu** at the top) opens the same menu on the laptop and shows the game buttons |
 
 ### Controls
 
 | Control | Action |
 |---|---|
-| Phone: Centre | Set the current pose as "neutral" (sword centre, straight wheel, standing tall, level tray) |
+| Phone: Centre | Set the current pose as "neutral" (sword centre, straight wheel, standing tall, level tray, level flight, level phone) |
 | Phone: Start / Pause | Start, play again, pause, resume |
 | Phone: Sensitivity | Smaller movement for the same effect (jump: easier to trigger) |
 | Laptop `Space` / `Enter` | Start (in Jump Run, also jumps) |
@@ -106,6 +108,10 @@ Each pose must be held for 8 seconds and held **still**; if you wobble, progress
 
 **Marble Maze.** Hold the phone flat on your palm, screen up, top edge pointing at the screen, and press **Level tray** (it sets how you hold it as "flat"), then **Start**. Tilt the phone to roll the marble to the 🏁; a bubble level in the corner shows the tilt. Holes wait in the mouths of side passages, so take turns carefully: a marble that drops in costs one of three. 💎 in dead ends are worth 25. Each cleared maze scores 100 × its number plus a time bonus, and the next one is bigger. Without a phone, the arrow keys tilt the tray.
 
+**Sky Rings.** Hold the phone upright in both hands like a steering wheel, screen facing you, press **Level flight**, then **Start**. Turn the phone to bank left or right; like a real yoke, pull the top edge back toward you to climb and push it away to dive (press `I` on the laptop to invert that; it is remembered). Fly through the rings: 10 points, 20 through the white centre, triple for gold rings, and every 5 rings in a row raise the multiplier (up to ×5). A missed ring costs one of three planes and resets the multiplier. The course speeds up and the rings shrink as you go. Without a phone, the arrow keys fly the plane.
+
+**Gyro Snake.** Hold the phone flat, screen up, top edge pointing at the screen, press **Level phone**, then **Start**. Tip the phone toward where the snake should go: forward is up, toward you is down. Only the stronger tilt counts, and once it has turned you can level the phone again. The indicator in the corner shows your tilt and the direction it asks for. 🍎 are 10 points; every fifth apple a ⭐ appears for 6 seconds, worth 50 and three extra segments. The snake speeds up as it grows; walls and its own tail end the run. Without a phone, use the arrow keys.
+
 ## Scripts
 
 | Command | What it does |
@@ -134,8 +140,8 @@ Phone browsers only give web pages motion-sensor access on HTTPS. The server cre
 ## How it works
 
 - **`server/`**: HTTPS server, Vite dev middleware, and `rooms.ts`, which pairs one laptop with one phone per 4-letter room code and relays messages. Reconnection is built in on both sides; the laptop keeps its room code across refreshes.
-- **`src/shared/`**: code used by both sides: the message types (`protocol.ts`), orientation maths (`pointer.ts`), the jump detector (`jump.ts`) the yoga pose maths (`yoga.ts`) and the marble maze physics (`marble.ts`). All of it is unit-tested.
-- **`src/game/`**: one file per game (`game.ts` = Fruit Slicer, `car.ts`, `jump.ts`, `yoga.ts`, `maze.ts`, …) behind a shared `Scene` interface, plus `main.ts` that connects them to the network.
+- **`src/shared/`**: code used by both sides: the message types (`protocol.ts`), orientation maths (`pointer.ts`), the jump detector (`jump.ts`) the yoga pose maths (`yoga.ts`) the marble maze physics (`marble.ts`) the flight yoke and ring course (`flight.ts`) and the snake rules (`snake.ts`). All of it is unit-tested.
+- **`src/game/`**: one file per game (`game.ts` = Fruit Slicer, `car.ts`, `jump.ts`, `yoga.ts`, `maze.ts`, `sky.ts`, `snake.ts`, …) behind a shared `Scene` interface, plus `main.ts` that connects them to the network.
 - **`src/pad/`**: the phone page: permission flow, sensor streaming, jump detection, buttons, wake lock, vibration feedback (Android only).
 
 Jump detection runs **on the phone**: it watches the accelerometer for the take-off spike (about 2 g at default sensitivity) or a short free-fall, and only sends a tiny "jump" message.
