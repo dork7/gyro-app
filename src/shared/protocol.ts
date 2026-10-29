@@ -19,7 +19,7 @@ export interface SampleMsg {
   g: number; // gamma: left/right tilt, -90..90
 }
 
-export type PadButton = 'center' | 'start' | 'pause' | 'fire' | 'grip' | 'release';
+export type PadButton = 'center' | 'start' | 'pause' | 'fire' | 'grip' | 'release' | 'act';
 
 /** Which screen the laptop is showing. */
 export type GameId = 'home' | 'fruit' | 'car' | 'jump' | 'yoga' | 'write' | 'phonics' | 'tennis' | 'maze' | 'sky' | 'snake' | 'orbit' | 'uno' | 'duck' | 'potato' | 'fish' | 'bowl';
@@ -45,6 +45,7 @@ export type PadToGame =
   | { t: 'pedal'; gas: boolean; brake: boolean }
   | { t: 'select'; game: GameId }
   | { t: 'jump'; r: number } // r = take-off strength (ratio to gravity), 0 for a tap
+  | { t: 'joy'; x: number; y: number } // on-screen joystick instead of motion: -1..1, x right, y up
   | { t: 'uno'; a: UnoAction; name?: string; card?: number; color?: string; uno?: boolean }
   | { t: 'potato'; a: 'hello' | 'start' | 'pass'; name?: string; dir?: 1 | -1 }
   | { t: 'pong'; id: number };
@@ -63,7 +64,7 @@ export type GameToPad =
 export type ServerToGame = { t: 'hosted'; room: string } | { t: 'pads'; ids: string[] }; // ids: connected phones, in join order
 export type ServerToPad = { t: 'joined'; gameOn: boolean } | { t: 'game'; on: boolean } | { t: 'error'; msg: string };
 
-export const PAD_TYPES = new Set(['s', 'btn', 'cfg', 'pedal', 'select', 'jump', 'uno', 'potato', 'pong']);
+export const PAD_TYPES = new Set(['s', 'btn', 'cfg', 'pedal', 'select', 'jump', 'joy', 'uno', 'potato', 'pong']);
 export const GAME_TYPES = new Set(['ping', 'haptic', 'state', 'uno', 'potato']);
 
 export const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I or O

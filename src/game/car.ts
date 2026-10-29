@@ -309,6 +309,11 @@ export class CarGame implements Scene {
   calibrate(): void {
     this.theta0 = this.theta;
   }
+  /** On-screen joystick: x (-1..1) is the wheel. */
+  joy(x: number, now: number): void {
+    this.padSteer = x;
+    this.lastPadSample = now;
+  }
   setSensitivity(v: number): void {
     this.sens = v;
   }

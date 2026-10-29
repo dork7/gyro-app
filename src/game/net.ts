@@ -9,6 +9,8 @@ export interface HostHandlers {
   onPedal(gas: boolean, brake: boolean): void;
   onSelect(game: GameId): void;
   onJump(strength: number): void;
+  /** On-screen joystick, -1..1 each way (x right, y up). */
+  onJoy(x: number, y: number): void;
   /** UNO moves come from every phone, tagged with the sender's pad id. */
   onUno(from: string, m: Extract<PadToGame, { t: 'uno' }>): void;
   onPotato(from: string, m: Extract<PadToGame, { t: 'potato' }>): void;
@@ -72,8 +74,8 @@ export class HostConnection {
           this.h.onPotato(from, m as unknown as Extract<PadToGame, { t: 'potato' }>);
           return;
         }
-        // pressing a button or picking a game makes that phone the controller
-        if ((m.t === 'btn' || m.t === 'select') && from !== this.controller) {
+        // pressing a button, touching the joystick or picking a game makes that phone the controller
+        if ((m.t === 'btn' || m.t === 'select' || m.t === 'joy') && from !== this.controller) {
           this.controller = from;
           this.h.onPad(true);
         }
@@ -119,6 +121,12 @@ export class HostConnection {
         case 'jump':
           this.h.onJump(Number((m as unknown as { r: number }).r) || 0);
           break;
+        case 'joy': {
+          const j = m as unknown as { x: number; y: number };
+          const c = (v: number) => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
+          this.h.onJoy(c(Number(j.x)), c(Number(j.y)));
+          break;
+        }
         case 'select':
           this.h.onSelect((m as unknown as { game: GameId }).game);
           break;

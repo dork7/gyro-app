@@ -48,6 +48,14 @@ const PARTY = new Set<GameId>(['uno', 'potato']); // games where every phone pla
 let helloFor: GameId | '' = ''; // the party game this phone has joined
 const flick = new FlickDetector();
 let controlsOn = false;
+let useJoy = false; // steer with the on-screen joystick instead of the motion sensors
+const NO_JOY = new Set<GameId>(['home', 'jump', 'uno', 'potato']); // games the joystick does not steer
+const POINTING = new Set<GameId>(['fruit', 'write', 'phonics', 'tennis', 'duck', 'fish', 'bowl']); // it moves a pointer
+try {
+  useJoy = localStorage.getItem('joy') === '1';
+} catch {
+  /* ignore */
+}
 
 // ---------------------------------------------------------------- status UI
 function setStatus(text: string, kind: 'true' | 'false' | 'error'): void {
@@ -148,7 +156,7 @@ const round = (n: number) => Math.round(n * 100) / 100;
 function onOrientation(e: DeviceOrientationEvent): void {
   if (e.alpha === null || e.beta === null) return;
   lastEvent = performance.now();
-  if (!joined || !gameOn) return;
+  if (!joined || !gameOn || useJoy) return;
   send({ t: 's', a: round(e.alpha), b: round(e.beta), g: round(e.gamma ?? 0) });
   sent++;
 }
@@ -268,6 +276,13 @@ function renderInfo(): void {
   $('jumpCtl').hidden = game !== 'jump';
   $('duckCtl').hidden = game !== 'duck';
   $('bowlCtl').hidden = game !== 'bowl';
+  const joyOn = useJoy && !NO_JOY.has(game);
+  document.body.classList.toggle('joy', joyOn);
+  $('joyCtl').hidden = !joyOn;
+  $('actBtn').hidden = !(game === 'fish' || game === 'phonics');
+  $('actBtn').textContent = game === 'fish' ? 'CAST / STRIKE' : 'PICK';
+  $('centerBtn').hidden = joyOn;
+  $('modeBtn').textContent = useJoy ? '📱 Use motion instead of the joystick' : '🕹️ Use joystick instead of motion';
   $('homeBtn').hidden = home || $('controls').hidden;
   $('gamesBtn').hidden = home || $('controls').hidden;
   $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : game === 'maze' ? 'Level tray' : game === 'sky' ? 'Level flight' : game === 'snake' ? 'Level phone' : game === 'orbit' ? 'Centre cannon' : game === 'duck' ? 'Centre gun' : game === 'fish' ? 'Centre rod' : 'Centre';
@@ -309,6 +324,7 @@ function renderInfo(): void {
         : gameState === 'paused'
           ? ['Paused']
           : [ready];
+  if (joyOn && gameState !== 'playing' && !home) lines.push(game === 'fish' || game === 'phonics' ? 'Joystick: move the pointer, ACTION to cast or pick' : game === 'bowl' ? 'Joystick: line up, hold GRIP, flick the stick up and let go' : POINTING.has(game) ? 'Joystick: push to move the pointer' : 'Joystick: push the stick to steer');
   if (!home && ctl && ctl !== pid) lines.push('Another phone is the controller: press Centre or Start to take over.');
   $('info').textContent = lines.join('\n');
   $('pauseBtn').textContent = gameState === 'paused' ? 'Resume' : 'Pause';
@@ -376,7 +392,10 @@ $('enableBtn').addEventListener('click', async () => {
     room = typed;
     connect();
   }
-  if (await enableMotion()) showControls();
+  if (await enableMotion()) {
+    setJoy(false);
+    showControls();
+  }
 });
 // Card games need no sensors: join straight away (no permission prompt).
 $('noMotionBtn').addEventListener('click', () => {
@@ -390,8 +409,80 @@ $('noMotionBtn').addEventListener('click', () => {
     room = typed;
     connect();
   }
+  setJoy(true);
   showControls();
 });
+
+function setJoy(on: boolean): void {
+  useJoy = on;
+  try {
+    localStorage.setItem('joy', on ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+  renderInfo();
+}
+$('modeBtn').addEventListener('click', async () => {
+  if (useJoy && !sensing && !(await enableMotion())) return;
+  setJoy(!useJoy);
+});
+
+// Joystick: the knob follows the thumb inside the ring and springs back on release. The
+// position goes out on every move and at least every 50 ms while held, so the laptop
+// knows the stick is still pushed.
+{
+  const pad = $('joy');
+  const knob = $('joyKnob');
+  let held: number | null = null;
+  let jx = 0;
+  let jy = 0;
+  let lastSend = 0;
+  const sendJoy = () => {
+    lastSend = performance.now();
+    send({ t: 'joy', x: round(jx), y: round(jy) });
+  };
+  const moveTo = (e: PointerEvent) => {
+    const r = pad.getBoundingClientRect();
+    const reach = r.width * 0.31; // ring radius minus half the knob
+    let dx = (e.clientX - (r.left + r.width / 2)) / reach;
+    let dy = (e.clientY - (r.top + r.height / 2)) / reach;
+    const m = Math.hypot(dx, dy);
+    if (m > 1) {
+      dx /= m;
+      dy /= m;
+    }
+    jx = dx;
+    jy = -dy;
+    knob.style.transform = `translate(${dx * reach}px, ${dy * reach}px)`;
+    if (performance.now() - lastSend > 16) sendJoy();
+  };
+  pad.addEventListener('pointerdown', (e) => {
+    pad.setPointerCapture(e.pointerId);
+    held = e.pointerId;
+    pad.classList.add('held');
+    moveTo(e);
+    if ('vibrate' in navigator) navigator.vibrate(8);
+  });
+  pad.addEventListener('pointermove', (e) => {
+    if (e.pointerId === held) moveTo(e);
+  });
+  const letGo = (e: PointerEvent) => {
+    if (e.pointerId !== held) return;
+    held = null;
+    jx = 0;
+    jy = 0;
+    knob.style.transform = '';
+    pad.classList.remove('held');
+    sendJoy();
+  };
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) pad.addEventListener(ev, letGo);
+  pad.addEventListener('contextmenu', (e) => e.preventDefault());
+  setInterval(() => {
+    if (held !== null && performance.now() - lastSend > 50) sendJoy();
+  }, 50);
+}
+$('actBtn').addEventListener('pointerdown', () => press('act'));
+$('actBtn').addEventListener('contextmenu', (e) => e.preventDefault());
 
 function showControls(): void {
   $('enable').hidden = true;

@@ -128,6 +128,11 @@ export class SkyGame implements Scene {
   calibrate(): void {
     this.ref = { ...this.cur };
   }
+  /** On-screen joystick (-1..1): sideways banks, up climbs. */
+  joy(x: number, y: number, now: number): void {
+    this.padCtl = { x, y };
+    this.lastPadSample = now;
+  }
   setSensitivity(v: number): void {
     this.sens = v;
   }

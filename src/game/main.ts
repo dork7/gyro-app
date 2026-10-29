@@ -31,6 +31,13 @@ let latest: Aim | null = null;
 let lastPadSample = 0;
 let samplesThisSecond = 0;
 let samplesPerSec = 0;
+// On-screen joystick on the phone (instead of motion). In the pointing games it moves a
+// virtual mouse cursor at a speed set by how far the stick is pushed.
+let joy = { x: 0, y: 0 };
+let lastJoy = 0;
+let joyMode = false; // the controller phone is using its joystick, not its sensors
+const cursor = { x: 0, y: 0 };
+const POINTING = new Set<GameId>(['fruit', 'write', 'phonics', 'tennis', 'duck', 'fish', 'bowl']);
 
 const hooks: GameHooks = {
   onSlice: () => net.haptic(18),
@@ -158,6 +165,7 @@ const net: HostConnection = new HostConnection({
     samplesThisSecond++;
     const now = performance.now();
     lastPadSample = now;
+    joyMode = false;
     if (mode === 'car') {
       car.setOrientation(s, now);
       return;
@@ -224,9 +232,18 @@ const net: HostConnection = new HostConnection({
     } else if (name === 'fire') {
       if (mode === 'duck') duck.fire();
     } else if (name === 'grip') {
-      if (mode === 'bowl') bowling.grip();
+      if (mode === 'bowl') {
+        if (joyMode) bowling.mouseDown();
+        else bowling.grip();
+      }
     } else if (name === 'release') {
-      if (mode === 'bowl') bowling.release(performance.now());
+      if (mode === 'bowl') {
+        if (joyMode) bowling.mouseUp(performance.now());
+        else bowling.release(performance.now());
+      }
+    } else if (name === 'act') {
+      if (mode === 'fish') fishing.click();
+      else if (mode === 'phonics') phonics.click(cursor.x, cursor.y);
     } else if (name === 'start') scene?.requestStart();
     else if (name === 'pause') scene?.togglePause();
   },
@@ -248,6 +265,23 @@ const net: HostConnection = new HostConnection({
     sfx.unlock();
     if (game === 'home') openMenu();
     else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis' || game === 'maze' || game === 'sky' || game === 'snake' || game === 'orbit' || game === 'uno' || game === 'duck' || game === 'potato' || game === 'fish' || game === 'bowl') choose(game);
+  },
+  onJoy(x, y) {
+    const now = performance.now();
+    if (now - lastJoy > 2000) {
+      cursor.x = window.innerWidth / 2;
+      cursor.y = window.innerHeight / 2;
+    }
+    lastJoy = now;
+    joyMode = true;
+    joy = { x, y };
+    if (menuOpen) return;
+    if (mode === 'car') car.joy(x, now);
+    else if (mode === 'maze') maze.joy(x, y, now);
+    else if (mode === 'sky') sky.joy(x, y, now);
+    else if (mode === 'snake') snake.joy(x, y, now);
+    else if (mode === 'orbit') orbit.joy(x, y, now);
+    else if (mode === 'yoga') yoga.joy(x, y);
   },
   onJump(strength) {
     sfx.unlock();
@@ -288,18 +322,34 @@ async function renderQr(room: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------- mouse and keyboard
+/** Mouse (or the joystick's cursor) at x, y: whatever the current game does with a mouse. */
+function pointerAt(x: number, y: number, now: number): void {
+  if (mode === 'write') write.penMove(x, y, now);
+  else if (mode === 'phonics') phonics.penMove(x, y, now);
+  else if (mode === 'tennis') tennis.racketMove(x, y, now);
+  else if (mode === 'orbit') orbit.aimAt(x, y);
+  else if (mode === 'duck') duck.aim(x, y);
+  else if (mode === 'fish') fishing.mouseMove(x, y, now);
+  else if (mode === 'bowl') bowling.mouseMove(x, y, now);
+  else if (mode === 'fruit') fruit.pointerMove(x, y, now);
+}
+
 window.addEventListener('pointermove', (e) => {
   if ((mode !== 'fruit' && mode !== 'write' && mode !== 'phonics' && mode !== 'tennis' && mode !== 'orbit' && mode !== 'duck' && mode !== 'fish' && mode !== 'bowl') || menuOpen) return;
-  if (performance.now() - lastPadSample < 1500) return; // phone wins while it is streaming
-  if (mode === 'write') write.penMove(e.clientX, e.clientY, performance.now());
-  else if (mode === 'phonics') phonics.penMove(e.clientX, e.clientY, performance.now());
-  else if (mode === 'tennis') tennis.racketMove(e.clientX, e.clientY, performance.now());
-  else if (mode === 'orbit') orbit.aimAt(e.clientX, e.clientY);
-  else if (mode === 'duck') duck.aim(e.clientX, e.clientY);
-  else if (mode === 'fish') fishing.mouseMove(e.clientX, e.clientY, performance.now());
-  else if (mode === 'bowl') bowling.mouseMove(e.clientX, e.clientY, performance.now());
-  else fruit.pointerMove(e.clientX, e.clientY, performance.now());
+  const now = performance.now();
+  if (now - lastPadSample < 1500 || now - lastJoy < 1500) return; // phone wins while it is streaming
+  pointerAt(e.clientX, e.clientY, now);
 });
+
+/** Joystick cursor: speed grows with the square of the push, up to ~1.8 screen heights a second. */
+function moveCursor(dt: number, now: number): void {
+  if (!POINTING.has(mode) || menuOpen || now - lastJoy > 300) return;
+  const v = window.innerHeight * 1.8 * sens;
+  const mag = Math.hypot(joy.x, joy.y);
+  cursor.x = Math.max(0, Math.min(window.innerWidth, cursor.x + joy.x * mag * v * dt));
+  cursor.y = Math.max(0, Math.min(window.innerHeight, cursor.y - joy.y * mag * v * dt));
+  pointerAt(cursor.x, cursor.y, now);
+}
 window.addEventListener('pointerdown', (e) => {
   sfx.unlock();
   if (mode === 'phonics' && !menuOpen && e.target === canvas) phonics.click(e.clientX, e.clientY);
@@ -410,7 +460,10 @@ setInterval(() => {
 }, 500);
 
 // ---------------------------------------------------------------- go
+let lastLoop = 0;
 function loop(t: number): void {
+  moveCursor(Math.min(0.05, lastLoop ? (t - lastLoop) / 1000 : 0.016), performance.now());
+  lastLoop = t;
   scene?.tick(t);
   requestAnimationFrame(loop);
 }
