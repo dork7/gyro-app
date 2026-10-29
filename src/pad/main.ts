@@ -1,10 +1,32 @@
 import { JumpDetector, spikeThreshold } from '../shared/jump';
+import { FlickDetector, neighbour, type PotatoView } from '../shared/potato';
 import type { GameId, GameState, PadButton } from '../shared/protocol';
+import { canPlay, card, label, sortHand, type Color, type UnoView } from '../shared/uno';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const params = new URLSearchParams(location.search);
 let room = (params.get('room') ?? '').toUpperCase();
+
+// This phone's pad id: kept for the life of the tab (also across reloads), so a phone
+// that drops out gets its place back, e.g. its UNO hand.
+const pid = (() => {
+  let id = '';
+  try {
+    id = sessionStorage.getItem('pid') ?? '';
+  } catch {
+    /* ignore */
+  }
+  if (!/^[A-Za-z0-9]{4,16}$/.test(id)) {
+    id = Math.random().toString(36).slice(2, 10).padEnd(8, '0');
+    try {
+      sessionStorage.setItem('pid', id);
+    } catch {
+      /* ignore */
+    }
+  }
+  return id;
+})();
 
 let ws: WebSocket | null = null;
 let joined = false;
@@ -21,6 +43,11 @@ let lastMotion = 0;
 let meterPeak = 0;
 let info = { score: 0, lives: 3, best: 0 };
 let wakeLock: unknown = null;
+let ctl = ''; // pad id of the phone that steers the motion games
+const PARTY = new Set<GameId>(['uno', 'potato']); // games where every phone plays
+let helloFor: GameId | '' = ''; // the party game this phone has joined
+const flick = new FlickDetector();
+let controlsOn = false;
 
 // ---------------------------------------------------------------- status UI
 function setStatus(text: string, kind: 'true' | 'false' | 'error'): void {
@@ -48,7 +75,7 @@ function connect(): void {
   ws = sock;
   sock.onopen = () => {
     retry = 400;
-    sock.send(JSON.stringify({ t: 'join', room }));
+    sock.send(JSON.stringify({ t: 'join', room, pid }));
     refreshStatus();
   };
   sock.onmessage = (ev) => {
@@ -62,6 +89,7 @@ function connect(): void {
       case 'joined':
         joined = true;
         gameOn = Boolean(m.gameOn);
+        helloFor = '';
         send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
         sendPedals();
         break;
@@ -85,8 +113,19 @@ function connect(): void {
       case 'state':
         gameState = m.state as GameState;
         game = (m.game as GameId) ?? 'fruit';
+        ctl = typeof m.ctl === 'string' ? m.ctl : '';
         info = { score: Number(m.score), lives: Number(m.lives), best: Number(m.best) };
+        if (!PARTY.has(game)) helloFor = '';
+        else if (helloFor !== game && controlsOn) sayHello();
         renderInfo();
+        break;
+      case 'uno':
+        uno = m.v as UnoView;
+        renderUno();
+        break;
+      case 'potato':
+        pot = m.v as PotatoView;
+        renderPotato();
         break;
     }
     refreshStatus();
@@ -126,6 +165,9 @@ function onMotion(e: DeviceMotionEvent): void {
     send({ t: 'jump', r: round(strength) });
     if ('vibrate' in navigator) navigator.vibrate(12);
   }
+  // Hot Potato: a sideways flick throws the potato, if this phone has it
+  const dir = flick.push(a.x, now);
+  if (dir !== null && game === 'potato' && potHolding()) passPotato(dir);
 }
 
 async function enableMotion(): Promise<boolean> {
@@ -214,13 +256,21 @@ window.addEventListener('beforeunload', () => void releaseWakeLock());
 function renderInfo(): void {
   document.body.dataset.game = game;
   const home = game === 'home';
+  const isUno = game === 'uno';
+  const isPot = game === 'potato';
   $('homeCtl').hidden = !home;
-  $('gameCtl').hidden = home;
+  $('gameCtl').hidden = home || isUno || isPot;
+  $('unoCtl').hidden = !isUno;
+  $('potCtl').hidden = !isPot;
+  if (!isUno && !isPot) $('partyName').hidden = true;
+  $('info').hidden = isUno || isPot;
   $('carCtl').hidden = game !== 'car';
   $('jumpCtl').hidden = game !== 'jump';
+  $('duckCtl').hidden = game !== 'duck';
+  $('bowlCtl').hidden = game !== 'bowl';
   $('homeBtn').hidden = home || $('controls').hidden;
   $('gamesBtn').hidden = home || $('controls').hidden;
-  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : game === 'maze' ? 'Level tray' : game === 'sky' ? 'Level flight' : game === 'snake' ? 'Level phone' : game === 'orbit' ? 'Centre cannon' : 'Centre';
+  $('centerBtn').textContent = game === 'car' ? 'Centre wheel' : game === 'yoga' ? 'Stand tall (recalibrate)' : game === 'write' ? 'Centre pen' : game === 'phonics' ? 'Centre pointer' : game === 'tennis' ? 'Centre racket' : game === 'maze' ? 'Level tray' : game === 'sky' ? 'Level flight' : game === 'snake' ? 'Level phone' : game === 'orbit' ? 'Centre cannon' : game === 'duck' ? 'Centre gun' : game === 'fish' ? 'Centre rod' : 'Centre';
 
   const ready =
     game === 'car'
@@ -243,16 +293,23 @@ function renderInfo(): void {
                       ? 'Hold the phone flat, screen up, Level phone, then Start and tip to steer'
                       : game === 'orbit'
                         ? 'Hold the phone flat, Centre cannon, then Start and twist to aim'
+                        : game === 'duck'
+                          ? 'Point the phone at the screen like a gun, Centre gun, then FIRE'
+                          : game === 'fish'
+                            ? 'Hold the phone like a rod, Centre rod, Start, then whip forward to cast'
+                            : game === 'bowl'
+                              ? 'Point at the screen, Centre, then hold GRIP, swing underarm and let go'
             : 'Slice the watermelon or press Start';
   const lines = home
     ? ['Choose a game (or pick the current one to resume)']
     : gameState === 'playing'
-      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : game === 'phonics' ? 'Sounds left' : game === 'maze' ? 'Marbles' : game === 'sky' ? 'Planes' : game === 'snake' ? 'Length' : game === 'orbit' ? 'Shields' : 'Lives'} ${info.lives}`]
+      ? [`Score ${info.score}   ${game === 'car' ? 'Cars' : game === 'yoga' ? 'Poses left' : game === 'write' ? 'Digits left' : game === 'phonics' ? 'Sounds left' : game === 'maze' ? 'Marbles' : game === 'sky' ? 'Planes' : game === 'snake' ? 'Length' : game === 'orbit' ? 'Shields' : game === 'duck' ? 'Shells' : game === 'fish' ? 'Seconds' : game === 'bowl' ? 'Frame' : 'Lives'} ${info.lives}`]
       : gameState === 'over'
         ? [`Game over: ${info.score}  (best ${info.best})`]
         : gameState === 'paused'
           ? ['Paused']
           : [ready];
+  if (!home && ctl && ctl !== pid) lines.push('Another phone is the controller: press Centre or Start to take over.');
   $('info').textContent = lines.join('\n');
   $('pauseBtn').textContent = gameState === 'paused' ? 'Resume' : 'Pause';
   $('startBtn').textContent = gameState === 'over' ? 'Play again' : game === 'write' && gameState === 'playing' ? 'Skip digit' : game === 'phonics' && gameState === 'playing' ? '🔊 Hear again' : 'Start';
@@ -319,18 +376,62 @@ $('enableBtn').addEventListener('click', async () => {
     room = typed;
     connect();
   }
-  if (await enableMotion()) {
-    $('enable').hidden = true;
-    $('controls').hidden = false;
-    void requestWakeLock();
-    renderInfo();
-  }
+  if (await enableMotion()) showControls();
 });
+// Card games need no sensors: join straight away (no permission prompt).
+$('noMotionBtn').addEventListener('click', () => {
+  $('error').hidden = true;
+  if (!room) {
+    const typed = ($('roomInput') as HTMLInputElement).value.trim().toUpperCase();
+    if (typed.length !== 4) {
+      showError('Enter the 4-letter room code shown on the laptop.');
+      return;
+    }
+    room = typed;
+    connect();
+  }
+  showControls();
+});
+
+function showControls(): void {
+  $('enable').hidden = true;
+  $('controls').hidden = false;
+  controlsOn = true;
+  void requestWakeLock();
+  renderInfo();
+  if (PARTY.has(game) && helloFor !== game) sayHello();
+}
 $('jumpBtn').addEventListener('pointerdown', () => {
   send({ t: 'jump', r: 0 });
   if ('vibrate' in navigator) navigator.vibrate(12);
 });
 $('centerBtn').addEventListener('click', () => press('center'));
+// the trigger fires on touch-down: no waiting for the finger to lift
+$('fireBtn').addEventListener('pointerdown', () => {
+  send({ t: 'btn', name: 'fire' });
+  if ('vibrate' in navigator) navigator.vibrate(25);
+});
+$('fireBtn').addEventListener('contextmenu', (e) => e.preventDefault());
+// bowling: the ball is held while the thumb is down and released when it lifts
+{
+  const grip = $('gripBtn');
+  let held = false;
+  grip.addEventListener('pointerdown', (e) => {
+    grip.setPointerCapture(e.pointerId);
+    held = true;
+    grip.classList.add('down');
+    send({ t: 'btn', name: 'grip' });
+    if ('vibrate' in navigator) navigator.vibrate(10);
+  });
+  const letGo = () => {
+    if (!held) return;
+    held = false;
+    grip.classList.remove('down');
+    send({ t: 'btn', name: 'release' });
+  };
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) grip.addEventListener(ev, letGo);
+  grip.addEventListener('contextmenu', (e) => e.preventDefault());
+}
 $('startBtn').addEventListener('click', () => press('start'));
 $('pauseBtn').addEventListener('click', () => press('pause'));
 
@@ -343,6 +444,7 @@ try {
 const showSens = () => {
   $('sensVal').textContent = `${Number(sens.value).toFixed(1)}×`;
   detector.sens = Number(sens.value);
+  flick.sens = Number(sens.value);
   $('meterThr').style.left = `${(spikeThreshold(detector.sens) / 3) * 100}%`;
 };
 showSens();
@@ -379,6 +481,233 @@ setInterval(() => {
   (window as unknown as { __padRate: number }).__padRate = sent;
   sent = 0;
 }, 1000);
+
+// ---------------------------------------------------------------- UNO
+// The laptop runs the game and sends this phone a view with only its own hand.
+let uno: UnoView | null = null;
+let unoArmed = false; // UNO! pressed, sent with the next card
+let unoHidden = false;
+let pickFor: number | null = null; // wild card waiting for a colour
+let wasMyTurn = false;
+
+const nameInput = $('unoName') as HTMLInputElement;
+try {
+  nameInput.value = localStorage.getItem('unoName') ?? '';
+} catch {
+  /* ignore */
+}
+
+/** Join the party game that is open on the laptop (UNO or Hot Potato), with our name. */
+function sayHello(): void {
+  if (!joined || !PARTY.has(game)) return;
+  helloFor = game;
+  send({ t: game, a: 'hello', name: nameInput.value.trim() });
+}
+
+function cardEl(id: number, cls = ''): HTMLButtonElement {
+  const c = card(id);
+  const el = document.createElement('button');
+  el.className = `ucard ${c.color ? 'c-' + c.color : 'wild'} ${cls}`;
+  const span = document.createElement('span');
+  span.textContent = label(c);
+  el.append(span);
+  return el;
+}
+
+function renderUno(): void {
+  const v = uno;
+  if (!v) return;
+  const lobby = v.phase === 'lobby';
+  const mine = v.phase === 'play' && v.you >= 0 && v.turn === v.you;
+  $('unoLobby').hidden = !lobby && v.phase !== 'over';
+  $('partyName').hidden = !lobby;
+  $('unoPlay').hidden = lobby || v.you < 0;
+  $('unoStart').textContent = lobby ? 'Start round' : 'Next round';
+  $('unoStart').hidden = !(lobby || v.phase === 'over');
+
+  // status line
+  const status = $('unoStatus');
+  status.className = mine ? 'mine' : '';
+  if (lobby) status.textContent = v.you >= 0 ? `You are in · ${v.names.length} player${v.names.length === 1 ? '' : 's'}` : 'Joining…';
+  else if (v.phase === 'paused') status.textContent = 'Paused';
+  else if (v.phase === 'over') status.textContent = v.winner === v.you ? 'You win! 🎉' : `${v.names[v.winner ?? 0]} wins`;
+  else if (v.you < 0) status.textContent = 'Watching: you join next round';
+  else status.textContent = mine ? 'Your turn!' : `${v.names[v.turn]}'s turn`;
+  $('unoLog').textContent = v.log;
+  const note = $('unoNote');
+  note.hidden = !v.note;
+  note.textContent = v.note ?? '';
+  if (mine && !wasMyTurn && 'vibrate' in navigator) navigator.vibrate([30, 60, 30]);
+  wasMyTurn = mine;
+
+  // top of the discard pile, painted in the colour in play
+  const topEl = $('unoTop');
+  topEl.replaceChildren();
+  if (v.top >= 0) {
+    const t = cardEl(v.top, 'mini');
+    if (v.color && card(v.top).color === null) t.className = `ucard mini c-${v.color}`;
+    topEl.replaceWith(t);
+    t.id = 'unoTop';
+  } else {
+    topEl.className = 'ucard mini empty';
+  }
+
+  // lobby: who is here
+  const players = $('unoPlayers');
+  players.replaceChildren(
+    ...v.names.map((n, i) => {
+      const el = document.createElement('span');
+      el.textContent = v.phase === 'over' ? `${n} · ${v.totals[i]} pts` : n;
+      if (i === v.you) el.className = 'me';
+      return el;
+    }),
+  );
+
+  // hand
+  const hand = $('unoHand');
+  hand.classList.toggle('turn', mine);
+  hand.classList.toggle('covered', unoHidden);
+  $('unoCover').hidden = !unoHidden;
+  $('unoHide').textContent = unoHidden ? '👀 Show my cards' : '🙈 Hide my cards';
+  const top = v.top >= 0 ? card(v.top) : null;
+  hand.replaceChildren(
+    ...sortHand(v.hand).map((id) => {
+      const ok = mine && top !== null && v.color !== null && canPlay(card(id), top, v.color) && (v.drawn === null || v.drawn === id);
+      const el = cardEl(id, `${ok ? 'ok' : ''} ${id === v.drawn ? 'drawn' : ''}`);
+      el.addEventListener('click', () => tapCard(id, ok));
+      return el;
+    }),
+  );
+
+  // buttons
+  ($('unoDraw') as HTMLButtonElement).disabled = !mine || v.drawn !== null;
+  $('unoDraw').hidden = mine && v.drawn !== null;
+  $('unoPass').hidden = !(mine && v.drawn !== null);
+  const sayUno = mine && v.hand.length === 2;
+  if (!sayUno) unoArmed = false;
+  $('unoSay').hidden = !sayUno;
+  $('unoSay').classList.toggle('armed', unoArmed);
+  $('unoSay').textContent = unoArmed ? 'UNO! ✓' : 'Say UNO!';
+}
+
+function tapCard(id: number, ok: boolean): void {
+  if (!uno || !ok) {
+    if ('vibrate' in navigator) navigator.vibrate(8);
+    return;
+  }
+  if (card(id).color === null) {
+    pickFor = id;
+    $('unoColors').hidden = false;
+    return;
+  }
+  playCard(id);
+}
+
+function playCard(id: number, color?: Color): void {
+  send({ t: 'uno', a: 'play', card: id, color, uno: unoArmed });
+  unoArmed = false;
+  if ('vibrate' in navigator) navigator.vibrate(12);
+}
+
+for (const b of document.querySelectorAll<HTMLButtonElement>('#unoColors [data-color]')) {
+  b.addEventListener('click', () => {
+    $('unoColors').hidden = true;
+    if (pickFor !== null) playCard(pickFor, b.dataset.color as Color);
+    pickFor = null;
+  });
+}
+$('unoColorCancel').addEventListener('click', () => {
+  $('unoColors').hidden = true;
+  pickFor = null;
+});
+$('unoDraw').addEventListener('click', () => send({ t: 'uno', a: 'draw' }));
+$('unoPass').addEventListener('click', () => send({ t: 'uno', a: 'pass' }));
+$('unoStart').addEventListener('click', () => send({ t: 'uno', a: 'start' }));
+$('unoSay').addEventListener('click', () => {
+  unoArmed = !unoArmed;
+  renderUno();
+});
+for (const id of ['unoHide', 'unoCover']) {
+  $(id).addEventListener('click', () => {
+    unoHidden = !unoHidden;
+    renderUno();
+  });
+}
+nameInput.addEventListener('change', () => {
+  try {
+    localStorage.setItem('unoName', nameInput.value.trim());
+  } catch {
+    /* ignore */
+  }
+  if (PARTY.has(game)) sayHello();
+});
+
+// ---------------------------------------------------------------- Hot Potato
+// The laptop runs the game; this phone shows who has the potato and, when it is ours,
+// turns red and lets us throw it with a flick or the arrow buttons.
+let pot: PotatoView | null = null;
+let lastPass = 0;
+
+function potHolding(): boolean {
+  return !!pot && pot.phase === 'play' && pot.you >= 0 && pot.holder === pot.you && !pot.flying;
+}
+
+function passPotato(dir: 1 | -1): void {
+  const now = performance.now();
+  if (now - lastPass < 400) return;
+  lastPass = now;
+  send({ t: 'potato', a: 'pass', dir });
+  if ('vibrate' in navigator) navigator.vibrate(20);
+}
+
+function renderPotato(): void {
+  const v = pot;
+  if (!v) return;
+  const lobby = v.phase === 'lobby';
+  const mine = potHolding();
+  const out = v.you >= 0 && v.lives[v.you] <= 0;
+  $('partyName').hidden = !lobby;
+  $('potStart').hidden = !(lobby || v.phase === 'over');
+  $('potStart').textContent = lobby ? 'Start' : 'Play again';
+  $('potHot').hidden = !mine;
+  document.body.classList.toggle('hot', mine);
+  document.body.style.setProperty('--heat', String(v.heat));
+
+  const status = $('potStatus');
+  if (lobby) status.textContent = v.you >= 0 ? `You are in · ${v.names.length} player${v.names.length === 1 ? '' : 's'}` : 'Joining…';
+  else if (v.phase === 'over') status.textContent = v.winner === v.you ? 'You win! 🏆' : `${v.names[v.winner ?? 0]} wins`;
+  else if (v.phase === 'paused') status.textContent = 'Paused';
+  else if (v.phase === 'boom') status.textContent = v.holder === v.you ? '💥 BOOM! It went off on you' : `💥 BOOM! ${v.names[v.holder]}`;
+  else if (v.you < 0) status.textContent = 'Watching: you join next game';
+  else if (out) status.textContent = 'You are out 💀';
+  else if (mine) status.textContent = 'You have the potato!';
+  else status.textContent = v.flying ? `Potato flying to ${v.names[v.holder]}…` : `${v.names[v.holder]} has the potato`;
+  $('potLog').textContent = v.log;
+  const note = $('potNote');
+  note.hidden = !v.note;
+  note.textContent = v.note ?? '';
+  $('potLives').textContent = v.you >= 0 && !lobby ? Array.from({ length: 3 }, (_, k) => (k < v.lives[v.you] ? '❤️' : '🖤')).join(' ') : '';
+
+  if (mine) {
+    $('potLeft').textContent = `◀ ${v.names[neighbour(v.lives, v.you, -1)]}`;
+    $('potRight').textContent = `${v.names[neighbour(v.lives, v.you, 1)]} ▶`;
+    $('potCall').textContent = sensing ? 'FLICK TO PASS!' : 'TAP TO PASS!';
+  }
+
+  $('potPlayers').replaceChildren(
+    ...v.names.map((n, i) => {
+      const el = document.createElement('span');
+      el.textContent = lobby ? n : `${n} ${v.lives[i] > 0 ? '❤️'.repeat(v.lives[i]) : '💀'}`;
+      if (i === v.you) el.className = 'me';
+      if (!lobby && i === v.holder) el.className += ' has';
+      return el;
+    }),
+  );
+}
+
+$('potLeft').addEventListener('pointerdown', () => potHolding() && passPotato(-1));
+$('potRight').addEventListener('pointerdown', () => potHolding() && passPotato(1));
+$('potStart').addEventListener('click', () => send({ t: 'potato', a: 'start' }));
 
 // ---------------------------------------------------------------- start
 if (!room) {

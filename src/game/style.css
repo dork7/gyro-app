@@ -254,6 +254,22 @@ body[data-state='paused'] #title {
   opacity: 0;
   pointer-events: none;
 }
+/* Bowling draws its score sheet where the title would be */
+body[data-mode='bowl'] #title {
+  display: none;
+}
+
+/* UNO between rounds: keep just the QR code so new players can still join */
+body[data-mode='uno'][data-state='over'] #title,
+body[data-mode='potato'][data-state='over'] #title {
+  opacity: 0;
+}
+body[data-mode='uno'][data-state='over'] #pair ol,
+body[data-mode='uno'][data-state='over'] #pair small,
+body[data-mode='potato'][data-state='over'] #pair ol,
+body[data-mode='potato'][data-state='over'] #pair small {
+  display: none;
+}
 body[data-state='playing'] {
   cursor: none;
 }
@@ -306,6 +322,11 @@ body[data-mode='maze'] #pair li[data-for='maze'],
 body[data-mode='sky'] #pair li[data-for='sky'],
 body[data-mode='snake'] #pair li[data-for='snake'],
 body[data-mode='orbit'] #pair li[data-for='orbit'],
+body[data-mode='uno'] #pair li[data-for='uno'],
+body[data-mode='duck'] #pair li[data-for='duck'],
+body[data-mode='potato'] #pair li[data-for='potato'],
+body[data-mode='fish'] #pair li[data-for='fish'],
+body[data-mode='bowl'] #pair li[data-for='bowl'],
 body[data-mode='jump'] #pair li[data-for='jump'] {
   display: list-item;
 }

@@ -107,7 +107,9 @@ button.primary {
   min-height: 38vh;
   font-size: 34px;
 }
-body[data-game='car'] #centerBtn {
+body[data-game='car'] #centerBtn,
+body[data-game='duck'] #centerBtn,
+body[data-game='bowl'] #centerBtn {
   min-height: 0;
   font-size: 20px;
   padding: 12px;
@@ -120,6 +122,8 @@ body[data-game='car'] #centerBtn {
 }
 .right {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
 }
@@ -245,4 +249,303 @@ input[type='range'] {
 }
 body[data-game='jump'] #centerBtn {
   display: none;
+}
+
+#noMotionBtn {
+  font-size: 15px;
+  padding: 14px;
+}
+
+/* ---- UNO ---- */
+#unoCtl {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+#unoBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+#unoStatus {
+  font-size: 22px;
+  font-weight: 800;
+}
+#unoStatus.mine {
+  color: #ffe066;
+}
+#unoLog {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+}
+.field input {
+  font: inherit;
+  font-size: 20px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+}
+#unoPlayers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#unoPlayers span {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+#unoPlayers span.me {
+  background: rgba(123, 228, 149, 0.25);
+  color: var(--ok);
+}
+#unoPlay {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#unoHandWrap {
+  position: relative;
+}
+#unoHand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+#unoHand.covered {
+  visibility: hidden;
+}
+#unoCover {
+  position: absolute;
+  inset: 0;
+  font-size: 18px;
+  background: rgba(30, 20, 45, 0.97);
+}
+#unoSay.armed {
+  background: #e5383b;
+  color: #ffe066;
+  animation: pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  to {
+    transform: scale(1.06);
+  }
+}
+
+/* a card: coloured face with the white oval and its symbol */
+.ucard {
+  position: relative;
+  width: 62px;
+  height: 92px;
+  padding: 0;
+  border-radius: 9px;
+  border: 4px solid #fff;
+  background: #1b1b1b;
+  font-weight: 900;
+  font-size: 26px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  transition: transform 0.12s, opacity 0.12s;
+}
+.ucard::before {
+  content: '';
+  position: absolute;
+  width: 74%;
+  height: 78%;
+  border-radius: 50%;
+  background: #fff;
+  transform: rotate(28deg);
+}
+.ucard span {
+  position: relative;
+}
+.ucard.mini {
+  flex: none;
+  width: 46px;
+  height: 68px;
+  font-size: 19px;
+  border-width: 3px;
+}
+.ucard.empty {
+  visibility: hidden;
+}
+.c-r { background: #e5383b; color: #e5383b; }
+.c-y { background: #f4c430; color: #c99a00; }
+.c-g { background: #2a9d4b; color: #2a9d4b; }
+.c-b { background: #1f6fd1; color: #1f6fd1; }
+.ucard.wild {
+  color: #fff;
+}
+.ucard.wild::before {
+  background: conic-gradient(#e5383b 0 25%, #1f6fd1 0 50%, #2a9d4b 0 75%, #f4c430 0);
+}
+.ucard.wild span {
+  text-shadow: 0 0 4px #000, 0 0 2px #000;
+}
+/* while it is your turn, cards you cannot play are dimmed */
+#unoHand.turn .ucard:not(.ok) {
+  opacity: 0.38;
+}
+#unoHand.turn .ucard.ok {
+  transform: translateY(-6px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+}
+.ucard.drawn {
+  outline: 3px solid #ffe066;
+  outline-offset: 2px;
+}
+#unoColors {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: rgba(18, 11, 28, 0.96);
+}
+#unoColors p {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--fg);
+  text-align: center;
+}
+.swatches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.swatches button {
+  min-height: 22vh;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* Duck Shoot trigger */
+.pedal.fire {
+  width: 100%;
+  min-height: 36vh;
+  font-size: 40px;
+  background: rgba(255, 59, 48, 0.25);
+  border: 2px solid rgba(255, 59, 48, 0.7);
+}
+.pedal.fire:active {
+  background: rgba(255, 59, 48, 0.55);
+}
+
+/* ---- Hot Potato ---- */
+#potCtl {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#potStatus {
+  font-size: 22px;
+  font-weight: 800;
+}
+#potLog {
+  color: var(--muted);
+  font-size: 14px;
+}
+#potLives {
+  font-size: 22px;
+}
+#potPlayers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#potPlayers span {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+#potPlayers span.me {
+  background: rgba(123, 228, 149, 0.25);
+  color: var(--ok);
+}
+#potPlayers span.has {
+  outline: 2px solid #ff6b35;
+}
+#potHot {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  background: radial-gradient(circle at 50% 35%, #ffb703, #e63946 70%);
+  text-align: center;
+  animation: hotpulse calc(0.6s - var(--heat, 0) * 0.45s) ease-in-out infinite alternate;
+}
+#potHot[hidden] {
+  display: none;
+}
+#potEmoji {
+  font-size: 110px;
+  line-height: 1;
+  animation: wobble 0.12s linear infinite alternate;
+}
+#potCall {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+#potHot button {
+  min-height: 18vh;
+  font-size: 20px;
+  background: rgba(0, 0, 0, 0.28);
+}
+body.hot {
+  background: #3a0d12;
+}
+@keyframes hotpulse {
+  to {
+    transform: scale(1.03);
+    filter: brightness(1.15);
+  }
+}
+@keyframes wobble {
+  from {
+    transform: rotate(-6deg);
+  }
+  to {
+    transform: rotate(6deg);
+  }
+}
+
+/* Bowling grip: hold with the thumb while swinging */
+.pedal.grip {
+  width: 100%;
+  min-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 30px;
+  background: rgba(70, 110, 255, 0.22);
+  border: 2px solid rgba(70, 110, 255, 0.7);
+}
+.pedal.grip small {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.pedal.grip.down {
+  background: rgba(70, 110, 255, 0.6);
 }

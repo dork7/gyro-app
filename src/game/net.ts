@@ -1,4 +1,4 @@
-import type { GameId, GameToPad, PadButton, SampleMsg, ServerToGame } from '../shared/protocol';
+import type { GameId, GameToPad, PadButton, PadToGame, SampleMsg, ServerToGame } from '../shared/protocol';
 
 export interface HostHandlers {
   onRoom(room: string): void;
@@ -9,13 +9,26 @@ export interface HostHandlers {
   onPedal(gas: boolean, brake: boolean): void;
   onSelect(game: GameId): void;
   onJump(strength: number): void;
+  /** UNO moves come from every phone, tagged with the sender's pad id. */
+  onUno(from: string, m: Extract<PadToGame, { t: 'uno' }>): void;
+  onPotato(from: string, m: Extract<PadToGame, { t: 'potato' }>): void;
+  /** The connected phones changed (pad ids, in join order). */
+  onPads(ids: string[]): void;
   onServer(connected: boolean): void;
 }
 
-/** The laptop's connection to the relay server. Reconnects by itself. */
+/**
+ * The laptop's connection to the relay server. Reconnects by itself.
+ *
+ * Several phones can be connected. The motion games listen to one of them, the
+ * controller: the phone that joined last, or that last pressed a button or picked a
+ * game. Sensor data and buttons from the other phones are ignored.
+ */
 export class HostConnection {
   room = '';
   padOn = false;
+  pads: string[] = [];
+  controller = '';
   rtt: number[] = []; // recent round-trip times (ms) game -> phone -> game
   private ws: WebSocket | null = null;
   private retry = 500;
@@ -43,11 +56,28 @@ export class HostConnection {
       this.h.onServer(true);
     };
     ws.onmessage = (ev) => {
-      let m: ServerToGame | { t: string; [k: string]: unknown };
+      let m: ServerToGame | { t: string; from?: string; [k: string]: unknown };
       try {
         m = JSON.parse(ev.data as string);
       } catch {
         return;
+      }
+      const from = 'from' in m && typeof m.from === 'string' ? m.from : '';
+      if (from) {
+        if (m.t === 'uno') {
+          this.h.onUno(from, m as unknown as Extract<PadToGame, { t: 'uno' }>);
+          return;
+        }
+        if (m.t === 'potato') {
+          this.h.onPotato(from, m as unknown as Extract<PadToGame, { t: 'potato' }>);
+          return;
+        }
+        // pressing a button or picking a game makes that phone the controller
+        if ((m.t === 'btn' || m.t === 'select') && from !== this.controller) {
+          this.controller = from;
+          this.h.onPad(true);
+        }
+        if (from !== this.controller) return;
       }
       switch (m.t) {
         case 'hosted':
@@ -59,11 +89,21 @@ export class HostConnection {
           }
           this.h.onRoom(this.room);
           break;
-        case 'pad':
-          this.padOn = (m as { on: boolean }).on;
-          if (!this.padOn) this.rtt = [];
-          this.h.onPad(this.padOn);
+        case 'pads': {
+          const ids = (m as { ids: string[] }).ids;
+          const joined = ids.filter((id) => !this.pads.includes(id));
+          this.pads = ids;
+          if (joined.length) this.controller = joined[joined.length - 1];
+          else if (!ids.includes(this.controller)) this.controller = ids[ids.length - 1] ?? '';
+          const on = ids.length > 0;
+          if (on !== this.padOn || joined.length) {
+            this.padOn = on;
+            if (!on) this.rtt = [];
+            this.h.onPad(on);
+          }
+          this.h.onPads(ids);
           break;
+        }
         case 's':
           this.h.onSample(m as unknown as SampleMsg);
           break;
@@ -92,8 +132,10 @@ export class HostConnection {
     };
     ws.onclose = () => {
       this.padOn = false;
+      this.pads = [];
       this.h.onServer(false);
       this.h.onPad(false);
+      this.h.onPads([]);
       setTimeout(() => this.connect(), this.retry);
       this.retry = Math.min(5000, this.retry * 2);
     };
@@ -101,6 +143,11 @@ export class HostConnection {
 
   send(m: GameToPad): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m));
+  }
+
+  /** Buzz the controller phone only. */
+  haptic(ms: number): void {
+    if (this.controller) this.send({ t: 'haptic', ms, to: this.controller });
   }
 
   medianRtt(): number | null {

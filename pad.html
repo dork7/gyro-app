@@ -27,6 +27,7 @@
           <input id="roomInput" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" />
         </form>
         <button id="enableBtn" class="big primary">Enable motion</button>
+        <button id="noMotionBtn">Continue without motion (UNO)</button>
         <p id="error" class="error" hidden></p>
       </section>
 
@@ -45,7 +46,12 @@
           <button class="big primary" data-game="sky">✈️ Sky Rings</button>
           <button class="big primary" data-game="snake">🐍 Gyro Snake</button>
           <button class="big primary" data-game="orbit">🪐 Orbit Defender</button>
-          <p>Fruit Slicer: hold like a sword, top edge toward the screen.<br />Racer: hold like a steering wheel.<br />Jump Run: hold the phone and jump.<br />Yoga: phone against your chest, both hands.<br />Number Writing: hold the phone like a pen and trace the digit.<br />Phonics: listen to the sound, point at its letter and hold still.<br />Tennis: swing the phone like a racket to hit the ball back.<br />Marble Maze: hold the phone flat like a tray and tilt it.<br />Sky Rings: hold the phone like a wheel; turn to bank, pull back to climb.<br />Gyro Snake: hold the phone flat and tip it toward where the snake should go.<br />Orbit Defender: hold the phone flat and twist it like a dial to aim.</p>
+          <button class="big primary" data-game="uno">🃏 UNO (2–8 phones)</button>
+          <button class="big primary" data-game="duck">🦆 Duck Shoot</button>
+          <button class="big primary" data-game="potato">🥔 Hot Potato (2–8 phones)</button>
+          <button class="big primary" data-game="fish">🎣 Fishing</button>
+          <button class="big primary" data-game="bowl">🎳 Bowling</button>
+          <p>Fruit Slicer: hold like a sword, top edge toward the screen.<br />Racer: hold like a steering wheel.<br />Jump Run: hold the phone and jump.<br />Yoga: phone against your chest, both hands.<br />Number Writing: hold the phone like a pen and trace the digit.<br />Phonics: listen to the sound, point at its letter and hold still.<br />Tennis: swing the phone like a racket to hit the ball back.<br />Marble Maze: hold the phone flat like a tray and tilt it.<br />Sky Rings: hold the phone like a wheel; turn to bank, pull back to climb.<br />Gyro Snake: hold the phone flat and tip it toward where the snake should go.<br />Orbit Defender: hold the phone flat and twist it like a dial to aim.<br />UNO: everyone scans the QR code; each phone holds its own hand.<br />Duck Shoot: aim the phone like a gun and press FIRE.<br />Hot Potato: everyone scans the QR code; flick your phone to pass the potato.<br />Fishing: whip the phone forward to cast, jerk up to strike, circle to reel.<br />Bowling: hold GRIP, swing your arm underarm, let go to bowl.</p>
         </div>
 
         <!-- car pedals (held, one per thumb when the phone is a wheel) -->
@@ -63,6 +69,16 @@
           <button id="jumpBtn" class="big primary">JUMP (tap)</button>
         </div>
 
+        <!-- duck shoot: the trigger, under the thumb -->
+        <div id="duckCtl" hidden>
+          <button id="fireBtn" class="pedal fire">FIRE</button>
+        </div>
+
+        <!-- bowling: hold to grip the ball, let go to release it -->
+        <div id="bowlCtl" hidden>
+          <button id="gripBtn" class="pedal grip">HOLD TO GRIP<small>swing, then let go</small></button>
+        </div>
+
         <div id="gameCtl" hidden>
           <button id="centerBtn" class="big primary">Centre</button>
           <div class="row">
@@ -74,6 +90,68 @@
             <input id="sens" type="range" min="0.5" max="3" step="0.1" value="1" />
           </label>
         </div>
+        <!-- party games (UNO, Hot Potato): the player's name, shown in their lobbies -->
+        <label id="partyName" class="field" hidden>Your name <input id="unoName" maxlength="12" autocomplete="off" spellcheck="false" /></label>
+
+        <!-- Hot Potato: the circle, and the potato when it is yours -->
+        <div id="potCtl" hidden>
+          <div id="potStatus">Joining…</div>
+          <div id="potLog"></div>
+          <p id="potNote" class="error" hidden></p>
+          <div id="potLives"></div>
+          <div id="potHot" hidden>
+            <div id="potEmoji">🥔</div>
+            <div id="potCall">FLICK TO PASS!</div>
+            <div class="row">
+              <button id="potLeft" class="big">◀ Left</button>
+              <button id="potRight" class="big">Right ▶</button>
+            </div>
+          </div>
+          <div id="potPlayers"></div>
+          <button id="potStart" class="big primary">Start</button>
+        </div>
+
+        <!-- UNO: this player's own hand and moves -->
+        <div id="unoCtl" hidden>
+          <div id="unoBar">
+            <div id="unoTop" class="ucard mini"></div>
+            <div>
+              <div id="unoStatus">Joining…</div>
+              <div id="unoLog"></div>
+            </div>
+          </div>
+          <p id="unoNote" class="error" hidden></p>
+
+          <div id="unoLobby">
+            <div id="unoPlayers"></div>
+            <button id="unoStart" class="big primary">Start round</button>
+          </div>
+
+          <div id="unoPlay">
+            <div id="unoHandWrap">
+              <div id="unoHand"></div>
+              <button id="unoCover" hidden>🙈 Cards hidden: tap to look</button>
+            </div>
+            <div class="row">
+              <button id="unoDraw" class="big">Draw card</button>
+              <button id="unoPass" class="big" hidden>Keep &amp; pass</button>
+              <button id="unoSay" class="big" hidden>UNO!</button>
+            </div>
+            <button id="unoHide" class="small">🙈 Hide my cards</button>
+          </div>
+
+          <div id="unoColors" hidden>
+            <p>Pick a colour</p>
+            <div class="swatches">
+              <button data-color="r" class="c-r">Red</button>
+              <button data-color="y" class="c-y">Yellow</button>
+              <button data-color="g" class="c-g">Green</button>
+              <button data-color="b" class="c-b">Blue</button>
+            </div>
+            <button id="unoColorCancel">Cancel</button>
+          </div>
+        </div>
+
         <button id="gamesBtn" class="big" hidden>☰ Choose game</button>
         <div id="info" class="info"></div>
       </section>

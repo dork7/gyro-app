@@ -114,6 +114,19 @@ export class Sfx {
     this.racket();
     this.tone('sine', 1400, 1100, 0.12, 0.12);
   }
+  /** Shotgun blast. */
+  shot(): void {
+    this.noise(0.22, 2400, 200, 0.75);
+    this.tone('sine', 160, 50, 0.18, 0.35);
+  }
+  /** Fuse tick, higher as it gets closer. */
+  tick(heat: number): void {
+    this.tone('square', 900 + heat * 700, 700 + heat * 500, 0.03, 0.06);
+  }
+  quack(): void {
+    this.tone('sawtooth', 520, 380, 0.09, 0.08);
+    this.tone('sawtooth', 500, 340, 0.12, 0.08, 0.13);
+  }
   pass(): void {
     this.tone('sine', 900, 1300, 0.07, 0.1);
   }

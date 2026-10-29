@@ -2,15 +2,20 @@ import QRCode from 'qrcode';
 import { aim, PointerMapper, type Aim } from '../shared/pointer';
 import type { GameId } from '../shared/protocol';
 import { Sfx } from './audio';
+import { BowlingGame } from './bowling';
 import { CarGame } from './car';
+import { DuckGame } from './duck';
+import { FishingGame } from './fishing';
 import { Game } from './game';
 import { JumpGame } from './jump';
 import { MazeGame } from './maze';
 import { OrbitGame } from './orbit';
 import { PhonicsGame } from './phonics';
+import { PotatoGame } from './potato';
 import { SkyGame } from './sky';
 import { SnakeGame } from './snake';
 import { TennisGame } from './tennis';
+import { UnoGame } from './uno';
 import { YogaGame } from './yoga';
 import { WriteGame } from './write';
 import { HostConnection } from './net';
@@ -28,8 +33,8 @@ let samplesThisSecond = 0;
 let samplesPerSec = 0;
 
 const hooks: GameHooks = {
-  onSlice: () => net.send({ t: 'haptic', ms: 18 }),
-  onHaptic: (ms) => net.send({ t: 'haptic', ms }),
+  onSlice: () => net.haptic(18),
+  onHaptic: (ms) => net.haptic(ms),
   onChange: () => pushState(),
 };
 const fruit = new Game(canvas, sfx, hooks);
@@ -43,6 +48,11 @@ const maze = new MazeGame(canvas, sfx, hooks);
 const sky = new SkyGame(canvas, sfx, hooks);
 const snake = new SnakeGame(canvas, sfx, hooks);
 const orbit = new OrbitGame(canvas, sfx, hooks);
+const uno = new UnoGame(canvas, sfx, hooks, (m) => net.send(m));
+const duck = new DuckGame(canvas, sfx, hooks);
+const potato = new PotatoGame(canvas, sfx, hooks, (m) => net.send(m));
+const fishing = new FishingGame(canvas, sfx, hooks);
+const bowling = new BowlingGame(canvas, sfx, hooks);
 
 // ---------------------------------------------------------------- which game is showing
 let mode: GameId = 'home';
@@ -54,7 +64,7 @@ function setMode(next: GameId): void {
   resetMenuUi();
   mode = next;
   document.body.dataset.mode = next;
-  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : next === 'phonics' ? phonics : next === 'tennis' ? tennis : next === 'maze' ? maze : next === 'sky' ? sky : next === 'snake' ? snake : next === 'orbit' ? orbit : null;
+  scene = next === 'fruit' ? fruit : next === 'car' ? car : next === 'jump' ? jump : next === 'yoga' ? yoga : next === 'write' ? write : next === 'phonics' ? phonics : next === 'tennis' ? tennis : next === 'maze' ? maze : next === 'sky' ? sky : next === 'snake' ? snake : next === 'orbit' ? orbit : next === 'uno' ? uno : next === 'duck' ? duck : next === 'potato' ? potato : next === 'fish' ? fishing : next === 'bowl' ? bowling : null;
   $('home').hidden = next !== 'home';
   $('title').querySelector('h1')!.textContent = scene?.title ?? 'Gyro Arcade';
   $('title').querySelector('p')!.textContent = scene?.subtitle ?? 'Pick a game. Your phone is the controller.';
@@ -116,6 +126,7 @@ function pushState(): void {
     score: scene?.score ?? 0,
     lives: scene?.lives ?? 0,
     best: scene?.best ?? 0,
+    ctl: net.controller,
   });
 }
 
@@ -129,7 +140,7 @@ const net: HostConnection = new HostConnection({
   onPad(on) {
     const chip = $('padstatus');
     chip.dataset.on = String(on);
-    chip.textContent = on ? 'Phone connected ✓' : 'Waiting for phone…';
+    chip.textContent = !on ? 'Waiting for phone…' : net.pads.length > 1 ? `${net.pads.length} phones connected ✓` : 'Phone connected ✓';
     if (!on) {
       latest = null;
       car.padLost();
@@ -182,6 +193,17 @@ const net: HostConnection = new HostConnection({
     } else if (mode === 'phonics' && !menuOpen) {
       const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
       phonics.penMove(p.x, p.y, now);
+    } else if (mode === 'bowl' && !menuOpen) {
+      const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
+      bowling.aim(p.x);
+      bowling.orient(latest.pitch, latest.yaw, s.g ?? 0, now);
+    } else if (mode === 'fish' && !menuOpen) {
+      const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
+      fishing.rodMove(p.x, p.y);
+      fishing.rodAngles(latest.yaw, latest.pitch, now);
+    } else if (mode === 'duck' && !menuOpen) {
+      const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
+      duck.aim(p.x, p.y);
     } else if (mode === 'tennis' && !menuOpen) {
       const p = mapper.map(latest, window.innerWidth, window.innerHeight, sens);
       tennis.racketMove(p.x, p.y, now);
@@ -199,6 +221,12 @@ const net: HostConnection = new HostConnection({
       else if (mode === 'snake') snake.calibrate();
       else if (mode === 'orbit') orbit.calibrate();
       else if (latest) mapper.setCenter(latest);
+    } else if (name === 'fire') {
+      if (mode === 'duck') duck.fire();
+    } else if (name === 'grip') {
+      if (mode === 'bowl') bowling.grip();
+    } else if (name === 'release') {
+      if (mode === 'bowl') bowling.release(performance.now());
     } else if (name === 'start') scene?.requestStart();
     else if (name === 'pause') scene?.togglePause();
   },
@@ -210,6 +238,8 @@ const net: HostConnection = new HostConnection({
     sky.setSensitivity(sens);
     snake.setSensitivity(sens);
     orbit.setSensitivity(sens);
+    fishing.setSensitivity(sens);
+    bowling.setSensitivity(sens);
   },
   onPedal(gas, brake) {
     car.setPedals(gas, brake);
@@ -217,11 +247,23 @@ const net: HostConnection = new HostConnection({
   onSelect(game) {
     sfx.unlock();
     if (game === 'home') openMenu();
-    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis' || game === 'maze' || game === 'sky' || game === 'snake' || game === 'orbit') choose(game);
+    else if (game === 'fruit' || game === 'car' || game === 'jump' || game === 'yoga' || game === 'write' || game === 'phonics' || game === 'tennis' || game === 'maze' || game === 'sky' || game === 'snake' || game === 'orbit' || game === 'uno' || game === 'duck' || game === 'potato' || game === 'fish' || game === 'bowl') choose(game);
   },
   onJump(strength) {
     sfx.unlock();
     if (mode === 'jump' && !menuOpen) jump.jump(strength);
+  },
+  onUno(from, m) {
+    if (mode === 'uno' && !menuOpen) uno.handle(from, m);
+  },
+  onPotato(from, m) {
+    if (mode === 'potato' && !menuOpen) potato.handle(from, m);
+  },
+  onPads(ids) {
+    uno.setPads(ids);
+    potato.setPads(ids);
+    const chip = $('padstatus');
+    if (ids.length) chip.textContent = ids.length > 1 ? `${ids.length} phones connected ✓` : 'Phone connected ✓';
   },
   onServer(connected) {
     if (!connected) toast('Lost connection to the game server…');
@@ -247,17 +289,26 @@ async function renderQr(room: string): Promise<void> {
 
 // ---------------------------------------------------------------- mouse and keyboard
 window.addEventListener('pointermove', (e) => {
-  if ((mode !== 'fruit' && mode !== 'write' && mode !== 'phonics' && mode !== 'tennis' && mode !== 'orbit') || menuOpen) return;
+  if ((mode !== 'fruit' && mode !== 'write' && mode !== 'phonics' && mode !== 'tennis' && mode !== 'orbit' && mode !== 'duck' && mode !== 'fish' && mode !== 'bowl') || menuOpen) return;
   if (performance.now() - lastPadSample < 1500) return; // phone wins while it is streaming
   if (mode === 'write') write.penMove(e.clientX, e.clientY, performance.now());
   else if (mode === 'phonics') phonics.penMove(e.clientX, e.clientY, performance.now());
   else if (mode === 'tennis') tennis.racketMove(e.clientX, e.clientY, performance.now());
   else if (mode === 'orbit') orbit.aimAt(e.clientX, e.clientY);
+  else if (mode === 'duck') duck.aim(e.clientX, e.clientY);
+  else if (mode === 'fish') fishing.mouseMove(e.clientX, e.clientY, performance.now());
+  else if (mode === 'bowl') bowling.mouseMove(e.clientX, e.clientY, performance.now());
   else fruit.pointerMove(e.clientX, e.clientY, performance.now());
 });
 window.addEventListener('pointerdown', (e) => {
   sfx.unlock();
   if (mode === 'phonics' && !menuOpen && e.target === canvas) phonics.click(e.clientX, e.clientY);
+  if (mode === 'duck' && !menuOpen && e.target === canvas) duck.fire();
+  if (mode === 'fish' && !menuOpen && e.target === canvas) fishing.click();
+  if (mode === 'bowl' && !menuOpen && e.target === canvas) bowling.mouseDown();
+});
+window.addEventListener('pointerup', () => {
+  if (mode === 'bowl' && !menuOpen) bowling.mouseUp(performance.now());
 });
 window.addEventListener('keydown', (e) => {
   sfx.unlock();
@@ -285,6 +336,11 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit9') choose('sky');
   else if (e.code === 'Digit0') choose('snake');
   else if (e.code === 'Minus') choose('orbit');
+  else if (e.code === 'Equal') choose('uno');
+  else if (e.code === 'BracketLeft') choose('duck');
+  else if (e.code === 'BracketRight') choose('potato');
+  else if (e.code === 'Backslash') choose('fish');
+  else if (e.code === 'Semicolon') choose('bowl');
   else if (e.code === 'KeyH') toggleMenu();
   else if (e.code === 'Escape' && menuOpen) closeMenu();
   else if (menuOpen) {
@@ -344,7 +400,7 @@ setInterval(() => {
     const rtt = net.medianRtt();
     dbg.textContent = [
       `room     ${net.room || '-'}`,
-      `phone    ${net.padOn ? 'connected' : 'no'}`,
+      `phones   ${net.pads.length} (controller ${net.controller || '-'})`,
       `samples  ${samplesPerSec}/s`,
       `rtt      ${rtt === null ? '-' : rtt.toFixed(1) + ' ms'} (laptop→phone→laptop)`,
       `one-way  ~${rtt === null ? '-' : (rtt / 2).toFixed(1) + ' ms'}`,
@@ -361,6 +417,6 @@ function loop(t: number): void {
 requestAnimationFrame(loop);
 
 // Handy for debugging from the browser console (and used by the automated test).
-Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __phonics: phonics, __tennis: tennis, __maze: maze, __sky: sky, __snake: snake, __orbit: orbit, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
+Object.assign(window, { __game: fruit, __car: car, __jump: jump, __yoga: yoga, __write: write, __phonics: phonics, __tennis: tennis, __maze: maze, __sky: sky, __snake: snake, __orbit: orbit, __uno: uno, __duck: duck, __potato: potato, __fishing: fishing, __bowling: bowling, __app: { setMode, openMenu, closeMenu, get mode() { return mode; }, get menuOpen() { return menuOpen; } } });
 
 setMode('home');
