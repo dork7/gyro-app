@@ -241,6 +241,9 @@ const net: HostConnection = new HostConnection({
     fishing.setSensitivity(sens);
     bowling.setSensitivity(sens);
   },
+  onLefty(lefty) {
+    tennis.setLefty(lefty);
+  },
   onPedal(gas, brake) {
     car.setPedals(gas, brake);
   },

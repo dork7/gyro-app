@@ -89,6 +89,8 @@
             Sensitivity <span id="sensVal">1.0×</span>
             <input id="sens" type="range" min="0.5" max="3" step="0.1" value="1" />
           </label>
+          <!-- tennis: from the middle of the court, early hits go left for a right-hander, right for a left-hander -->
+          <label id="leftyCtl" class="check" hidden><input id="lefty" type="checkbox" /> Left-handed</label>
         </div>
         <!-- party games (UNO, Hot Potato): the player's name, shown in their lobbies -->
         <label id="partyName" class="field" hidden>Your name <input id="unoName" maxlength="12" autocomplete="off" spellcheck="false" /></label>
