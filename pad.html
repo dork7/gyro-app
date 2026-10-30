@@ -27,7 +27,7 @@
           <input id="roomInput" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" />
         </form>
         <button id="enableBtn" class="big primary">Enable motion</button>
-        <button id="noMotionBtn">Continue without motion (UNO)</button>
+        <button id="noMotionBtn">Continue without motion (joystick)</button>
         <p id="error" class="error" hidden></p>
       </section>
 
@@ -79,6 +79,12 @@
           <button id="gripBtn" class="pedal grip">HOLD TO GRIP<small>swing, then let go</small></button>
         </div>
 
+        <!-- joystick: steers instead of motion, for phones without (or with denied) sensors -->
+        <div id="joyCtl" hidden>
+          <div id="joy"><div id="joyKnob"></div></div>
+          <button id="actBtn" class="pedal fire" hidden>ACTION</button>
+        </div>
+
         <div id="gameCtl" hidden>
           <button id="centerBtn" class="big primary">Centre</button>
           <div class="row">
@@ -89,8 +95,7 @@
             Sensitivity <span id="sensVal">1.0×</span>
             <input id="sens" type="range" min="0.5" max="3" step="0.1" value="1" />
           </label>
-          <!-- tennis: from the middle of the court, early hits go left for a right-hander, right for a left-hander -->
-          <label id="leftyCtl" class="check" hidden><input id="lefty" type="checkbox" /> Left-handed</label>
+          <button id="modeBtn" class="small">🕹️ Use joystick instead of motion</button>
         </div>
         <!-- party games (UNO, Hot Potato): the player's name, shown in their lobbies -->
         <label id="partyName" class="field" hidden>Your name <input id="unoName" maxlength="12" autocomplete="off" spellcheck="false" /></label>

@@ -111,6 +111,13 @@ export class SnakeGame implements Scene {
   calibrate(): void {
     this.ref = { ...this.tilt };
   }
+  /** On-screen joystick (-1..1, y up): push toward where the snake should go. */
+  joy(x: number, y: number, now: number): void {
+    this.padPush = { x, y: -y };
+    this.lastPadSample = now;
+    const d = tiltDir(this.padPush, this.wanted);
+    if (d) this.wanted = d;
+  }
   setSensitivity(v: number): void {
     this.sens = v;
   }

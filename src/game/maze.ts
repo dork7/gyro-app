@@ -119,6 +119,11 @@ export class MazeGame implements Scene {
   calibrate(): void {
     this.ref = { ...this.tilt };
   }
+  /** On-screen joystick (-1..1, y up): pushing it tilts the tray that way. */
+  joy(x: number, y: number, now: number): void {
+    this.padPush = { x, y: -y };
+    this.lastPadSample = now;
+  }
   setSensitivity(v: number): void {
     this.sens = v;
   }

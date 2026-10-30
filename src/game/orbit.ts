@@ -146,6 +146,12 @@ export class OrbitGame implements Scene {
   calibrate(): void {
     this.ref = this.yaw;
   }
+  /** On-screen joystick (-1..1, y up): the cannon points where the stick is pushed. */
+  joy(x: number, y: number, now: number): void {
+    if (Math.hypot(x, y) < 0.4) return;
+    this.target = angleOf(x, -y);
+    this.lastPadSample = now;
+  }
   setSensitivity(v: number): void {
     this.sens = v;
   }

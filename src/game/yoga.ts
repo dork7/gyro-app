@@ -141,6 +141,12 @@ export class YogaGame implements Scene {
     if (!this.haveRef) this.setRef();
   }
 
+  /** On-screen joystick (-1..1): sideways bends, pulling down folds forward. */
+  joy(x: number, y: number): void {
+    this.keyLean = clamp(x * 45, -45, 45);
+    this.keyFold = clamp(-y * 120, 0, 120);
+  }
+
   /** "Stand tall": use the current position as the zero pose. */
   calibrate(): void {
     this.setRef();

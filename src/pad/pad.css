@@ -561,3 +561,43 @@ body.hot {
 .pedal.grip.down {
   background: rgba(70, 110, 255, 0.6);
 }
+
+/* joystick: drag the knob, it springs back to the middle on release */
+#joyCtl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+#joy {
+  position: relative;
+  width: min(68vw, 260px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(120, 220, 255, 0.14), rgba(255, 255, 255, 0.05) 70%);
+  border: 2px solid rgba(120, 220, 255, 0.35);
+  touch-action: none;
+}
+#joyKnob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38%;
+  aspect-ratio: 1;
+  margin: -19% 0 0 -19%;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+#joy.held #joyKnob {
+  background: #fff;
+}
+#actBtn {
+  min-height: 16vh;
+  font-size: 28px;
+}
+/* with the joystick on screen, the game buttons make room for it */
+body.joy .pedal {
+  min-height: 18vh;
+}
