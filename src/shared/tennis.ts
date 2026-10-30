@@ -32,8 +32,6 @@ export const CAM_Z = -4.5;
  * everything slower than that hits proportionally softer.
  */
 export const FULL_SWING = 16;
-/** Below this swing speed the direction of the swing is too vague to aim the shot fully. */
-export const AIM_SWING = 3;
 /** Speed off the racket (m/s) for a still racket and for a full swing. */
 export const PACE_MIN = 9;
 export const PACE_MAX = 26;
@@ -141,24 +139,60 @@ export interface ReturnShot {
 /** A swing more downward than this (share of a full swing) drives the ball down instead of lifting it over the net. */
 const DOWN = -0.3;
 
+/** The ball can be hit between these depths (m in front of the player's baseline). */
+export const HIT_FAR = 2.2;
+export const HIT_NEAR = -1.5;
+/** Hitting the ball as it crosses the baseline is right on time. */
+const ON_TIME_Z = 0;
+/** Lateness past which a shot lands outside the sidelines, as a share of the hitting window. */
+const WIDE_T = 0.83;
+/** Sideways landing spot (m) for a shot timed right at the edge of the court. */
+const LANE = HALF_W - 0.7;
+/** How much further out (m) than LANE the very worst-timed shot goes. */
+const WIDE_SPREAD = 2.2;
+/** The deepest any shot lands (m from the player's baseline): power alone never sends it long. */
+const DEEPEST = LENGTH - 0.8;
+/** A ball hit this close to the middle (m) has no forehand or backhand side: handedness decides. */
+const MIDDLE = 0.6;
+
+/**
+ * How early or late the ball was hit, from how far in front of the baseline it was:
+ * -1 at the far end of the hitting window (very early), 0 on time, 1 at the near end (very late).
+ */
+function timing(z: number): number {
+  return z >= ON_TIME_Z ? -clamp((z - ON_TIME_Z) / (HIT_FAR - ON_TIME_Z), 0, 1) : clamp((ON_TIME_Z - z) / (ON_TIME_Z - HIT_NEAR), 0, 1);
+}
+
+/**
+ * Where across the far court a shot goes for a given timing. Early goes cross-court and
+ * late down the line, so the direction depends on which side the ball was hit from. From
+ * the middle, early goes left and late right for a right-hander, the other way for a left-hander.
+ */
+function aimX(contactX: number, t: number, lefty: boolean): number {
+  const line = Math.abs(contactX) >= MIDDLE ? Math.sign(contactX) : lefty ? -1 : 1; // the side a late shot goes to
+  const u = Math.abs(t);
+  const lane = u <= WIDE_T ? (LANE * u) / WIDE_T : LANE + ((u - WIDE_T) / (1 - WIDE_T)) * WIDE_SPREAD;
+  return line * Math.sign(t) * lane;
+}
+
 /**
  * The player's shot. A still racket blocks the ball back softly; the faster the swing,
- * the faster and deeper the ball goes, all the way up to FULL_SWING. The direction of
- * the swing aims it: sideways sends it across the court, upward adds depth. A full
- * upward swing or one aimed wide from a wide ball goes out; swing down at it and it is driven low,
- * which from normal hitting height means into the net. `off` is how far from the middle of the strings the ball
- * was caught (0 centre, 1 the edge of the reach): off-centre hits lose up to half
- * their power.
+ * the faster and deeper the ball goes, all the way up to FULL_SWING, and an upward swing
+ * adds a little depth, but no swing sends it long. Timing aims it (see `timing`): early
+ * goes cross-court, late down the line, and only a badly mistimed shot goes wide. Swing
+ * down at it and it is driven low, which from normal hitting height means into the net.
+ * `off` is how far from the middle of the strings the ball was caught (0 centre, 1 the
+ * edge of the reach): off-centre hits lose up to half their power. `lefty` flips which
+ * way a ball from the middle of the court goes.
  */
-export function returnShot(contact: Vec3, swing: Swing, off = 0): ReturnShot {
+export function returnShot(contact: Vec3, swing: Swing, off = 0, lefty = false): ReturnShot {
   const speed = Math.hypot(swing.vx, swing.vy);
   const power = clamp(speed / FULL_SWING, 0, 1) * (1 - 0.5 * clamp(off, 0, 1));
-  // Which way the racket was moving aims the shot; how fast it was moving sets the pace.
-  const side = speed ? (swing.vx / speed) * clamp(speed / AIM_SWING, 0, 1) : 0;
+  // When the ball was hit aims the shot; how fast the racket was moving sets the pace.
   const lift = speed ? (swing.vy / speed) * power : 0;
   let land = {
-    x: contact.x * 0.35 + side * 3.4,
-    z: NET_Z + 4 + 6.5 * power + 2.5 * lift,
+    x: aimX(contact.x, timing(contact.z), lefty),
+    z: Math.min(DEEPEST, NET_Z + 4 + 6.5 * power + 2.5 * lift),
   };
   const from: Vec3 = { x: contact.x, y: Math.max(0.3, contact.y), z: contact.z };
   const dx = land.x - from.x;

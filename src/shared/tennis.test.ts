@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrival, CPU_Z, FULL_SWING, GRIP, HALF_W, incomingShot, LENGTH, NET_H, NET_Z, project, returnShot, SERVICE, stepBall, type Ball } from './tennis';
+import { arrival, CPU_Z, FULL_SWING, GRIP, HALF_W, HIT_FAR, HIT_NEAR, incomingShot, LENGTH, NET_H, NET_Z, project, returnShot, SERVICE, stepBall, type Ball } from './tennis';
 
 /** Fly the ball at 120 Hz until `stop`; returns where it bounced and how high it was over the net. */
 function fly(b: Ball, stop: (b: Ball) => boolean): { bounces: { x: number; z: number }[]; netY: number } {
@@ -132,25 +132,60 @@ describe('returnShot', () => {
     expect(returnShot(contact, { vx: FULL_SWING * 2, vy: 0 }).pace).toBeCloseTo(fast.pace, 5);
   });
 
-  it('aims by the direction of the swing, not its speed', () => {
+  it('goes cross-court when hit early and down the line when hit late, from the right side', () => {
+    const swing = { vx: 4, vy: 0 };
+    const early = returnShot({ x: 2, y: 1.2, z: 1.5 }, swing);
+    const late = returnShot({ x: 2, y: 1.2, z: -0.8 }, swing);
+    expect(early.land.x).toBeLessThan(-1); // across to the left
+    expect(late.land.x).toBeGreaterThan(1); // straight up the right
+    expect(early.out).toBe(false);
+    expect(late.out).toBe(false);
+  });
+
+  it('mirrors from the left side: early goes across to the right', () => {
+    const swing = { vx: 4, vy: 0 };
+    expect(returnShot({ x: -2, y: 1.2, z: 1.5 }, swing).land.x).toBeGreaterThan(1);
+    expect(returnShot({ x: -2, y: 1.2, z: -0.8 }, swing).land.x).toBeLessThan(-1);
+  });
+
+  it('sends a ball from the middle left when early and right when late, flipped for a left-hander', () => {
+    const swing = { vx: 4, vy: 0 };
+    for (const x of [-0.3, 0, 0.3]) {
+      expect(returnShot({ x, y: 1.2, z: 1.5 }, swing).land.x).toBeLessThan(-1);
+      expect(returnShot({ x, y: 1.2, z: -0.8 }, swing).land.x).toBeGreaterThan(1);
+      expect(returnShot({ x, y: 1.2, z: 1.5 }, swing, 0, true).land.x).toBeGreaterThan(1);
+      expect(returnShot({ x, y: 1.2, z: -0.8 }, swing, 0, true).land.x).toBeLessThan(-1);
+    }
+  });
+
+  it('aims by timing, not by how hard the swing is', () => {
     const gentle = returnShot(contact, { vx: 4, vy: 0 });
     const hard = returnShot(contact, { vx: 14, vy: 0 });
     expect(hard.land.x).toBeCloseTo(gentle.land.x, 5);
     expect(hard.out).toBe(false);
   });
 
-  it('follows the direction of the swing', () => {
-    expect(returnShot(contact, { vx: -2, vy: 0 }).land.x).toBeLessThan(0);
-    expect(returnShot(contact, { vx: 2, vy: 0 }).land.x).toBeGreaterThan(0);
+  it('goes wide only when badly mistimed', () => {
+    const swing = { vx: 6, vy: 1 };
+    for (const z of [HIT_FAR, HIT_NEAR]) {
+      const shot = returnShot({ x: 2, y: 1.2, z }, swing);
+      expect(Math.abs(shot.land.x)).toBeGreaterThan(HALF_W);
+      expect(shot.out).toBe(true);
+    }
+    for (let z = -0.9; z <= 1.6; z += 0.25) {
+      for (const x of [-2.5, 0, 2.5]) expect(returnShot({ x, y: 1.2, z }, swing).out).toBe(false);
+    }
   });
 
-  it('goes out when over-hit', () => {
-    const wide = returnShot({ x: 3, y: 1.2, z: 0.5 }, { vx: 9, vy: 0 });
-    expect(Math.abs(wide.land.x)).toBeGreaterThan(HALF_W);
-    expect(wide.out).toBe(true);
-    const long = returnShot(contact, { vx: 0, vy: FULL_SWING });
-    expect(long.land.z).toBeGreaterThan(LENGTH);
-    expect(long.out).toBe(true);
+  it('never goes long, however hard or high the swing', () => {
+    for (const z of [1.5, 0, -0.8]) {
+      for (const [vx, vy] of [[FULL_SWING, 0], [0, FULL_SWING], [FULL_SWING, FULL_SWING], [FULL_SWING * 2, FULL_SWING * 2]] as const) {
+        const shot = returnShot({ x: 1, y: 1.2, z }, { vx, vy });
+        expect(shot.land.z).toBeLessThan(LENGTH);
+        const { bounces } = fly(shot.ball, (b) => b.p.z >= CPU_Z);
+        expect(bounces[0]!.z).toBeLessThan(LENGTH);
+      }
+    }
   });
 
   it('clears the net from a low contact unless swung down at', () => {

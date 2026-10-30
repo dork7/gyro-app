@@ -3,7 +3,10 @@
 // The racket follows the phone's aim (same mapping as the blade, see main.ts); the mouse
 // works too. When the ball arrives, the racket has to be on it: a ring shows where the
 // ball will come. Holding the racket still blocks the ball back softly, a faster swing
-// hits harder and deeper, and the swing direction steers the shot. Over-hit and it goes out.
+// hits harder and deeper (but never long), and timing aims it: hit early and it goes
+// cross-court, late and it goes down the line. A marker on the far court shows where the
+// shot would land if hit now; badly mistimed shots go wide. The racket reaches generously,
+// and a ball caught near the edge of the reach still goes back, just weakly.
 //
 // Like the real game: every point starts with a serve into the service box, the court
 // slows the ball at each bounce, a ball swung down at goes into the net (or clips the
@@ -21,15 +24,13 @@
 
 import { RANGE_Y, wrap180 } from '../shared/pointer';
 import type { GameState } from '../shared/protocol';
-import { arrival, CAM_Z, CPU_Z, DOUBLES_W, HALF_W, incomingShot, LENGTH, NET_H, NET_Z, project, returnShot, SERVICE, stepBall, type Ball, type Vec3 } from '../shared/tennis';
+import { arrival, CAM_Z, CPU_Z, DOUBLES_W, HALF_W, HIT_FAR, HIT_NEAR, incomingShot, LENGTH, NET_H, NET_Z, project, returnShot, SERVICE, stepBall, type Ball, type Vec3 } from '../shared/tennis';
 import type { Sfx } from './audio';
 import type { GameHooks, Scene } from './scene';
 
 const LIVES = 3;
-const HIT_FAR = 2.2; // the ball can be hit between these depths (m from the baseline)
-const HIT_NEAR = -1.5;
 const GONE = -3.2; // past this it is a miss
-const REACH = 0.75; // how close (m) the racket must be to the ball
+const REACH = 1.1; // how close (m) the racket must be to the ball: generous, for casual play
 const HEAD = 0.42; // racket head radius as drawn (m at the baseline)
 const BALL_R = 0.1;
 const CPU_REACH = 1.3;
@@ -42,7 +43,7 @@ const MARK_LIFE = 4; // seconds a bounce mark stays on the court
 const SWING_WINDOW = 110; // ms of movement the swing speed is measured over
 const SWINGING = 1.5; // racket speed (screen heights/s) that counts as a swing rather than holding still
 const BLOCK_Z = 0.4; // a still racket only blocks the ball once it is this close (m): until then there is time to swing
-const SWEET = 0.3; // a hit this close to the middle of the strings (share of REACH) is a sweet-spot hit
+const SWEET = 0.2; // a hit this close to the middle of the strings (share of REACH) is a sweet-spot hit
 const HIT_STOP = 0.07; // seconds the action freezes on a sweet-spot hit, for weight
 const CLOSE_T = 1.1; // seconds before arrival that the timing ring starts closing in
 const TARGET = 1.4; // half-size (m) of the target square on the far court
@@ -119,6 +120,7 @@ export class TennisGame implements Scene {
   private note = { text: '', t: 0, color: '#fff' };
   private particles: Particle[] = [];
   private overAt = -10;
+  private lefty = false; // from the middle of the court, early hits go right instead of left
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -159,6 +161,10 @@ export class TennisGame implements Scene {
       this.sfx.start();
       this.setState('playing');
     } else if (this.state === 'paused') this.togglePause();
+  }
+
+  setLefty(lefty: boolean): void {
+    this.lefty = lefty;
   }
 
   togglePause(): void {
@@ -313,7 +319,7 @@ export class TennisGame implements Scene {
   /** `off`: how far from the middle of the strings the ball was caught, 0 to 1. */
   private hit(off: number): void {
     const b = this.ball!;
-    const shot = returnShot(b.p, this.swing(), off);
+    const shot = returnShot(b.p, this.swing(), off, this.lefty);
     this.ball = shot.ball;
     this.shotKmh = Math.round(shot.pace * 3.6);
     this.shotT = 2.5;
@@ -577,6 +583,7 @@ export class TennisGame implements Scene {
     }
     if (b && b.p.z > NET_Z) this.drawBall(b);
     c.drawImage(L.net, 0, 0, w, h);
+    this.aimMarker(); // over the net, so the mesh never hides it
     if (this.mark && this.phase === 'incoming' && this.state !== 'over') this.timingRing();
     if (b && b.p.z <= NET_Z) this.drawBall(b);
 
@@ -885,6 +892,49 @@ export class TennisGame implements Scene {
       c.arc(m.x, m.y, r * (1 + 2.2 * left), 0, Math.PI * 2);
       c.stroke();
     }
+  }
+
+  /**
+   * Where the player's shot would land if the ball were hit right now: it sweeps from
+   * cross-court to down the line as the ball comes in, and turns red where it would go wide.
+   */
+  private aimMarker(): void {
+    const b = this.ball;
+    if (!b || this.phase !== 'incoming' || this.state !== 'playing' || b.p.z > NET_Z) return;
+    const contact = { x: b.p.x, y: b.p.y, z: clamp(b.p.z, HIT_NEAR, HIT_FAR) };
+    // caught where the racket is now: off the middle of the strings it comes off shorter
+    const p = this.at(contact);
+    const off = this.pen ? clamp(Math.hypot(this.pen.x - p.x, this.pen.y - p.y) / (REACH * p.s), 0, 1) : 0;
+    const shot = returnShot(contact, this.swing(), off, this.lefty);
+    const bad = shot.out || shot.net;
+    const rgb = bad ? '255,107,107' : '120,220,255';
+    const fade = clamp((NET_Z - b.p.z) / 3, 0, 1); // fades in once the ball is over the net
+    const c = this.ctx;
+    const m = this.at({ x: shot.land.x, y: 0, z: shot.land.z });
+    const rx = Math.max(6, 0.55 * m.s);
+    const ry = Math.max(2.5, 0.2 * m.s);
+    c.globalAlpha = fade;
+    c.fillStyle = `rgba(${rgb},0.25)`;
+    c.strokeStyle = `rgb(${rgb})`;
+    c.lineWidth = 2;
+    c.beginPath();
+    c.ellipse(m.x, m.y, rx, ry, 0, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    c.beginPath();
+    if (bad) {
+      c.moveTo(m.x - rx * 0.5, m.y - ry * 0.5);
+      c.lineTo(m.x + rx * 0.5, m.y + ry * 0.5);
+      c.moveTo(m.x + rx * 0.5, m.y - ry * 0.5);
+      c.lineTo(m.x - rx * 0.5, m.y + ry * 0.5);
+    } else {
+      c.moveTo(m.x - rx * 1.4, m.y);
+      c.lineTo(m.x + rx * 1.4, m.y);
+      c.moveTo(m.x, m.y - ry * 1.8);
+      c.lineTo(m.x, m.y + ry * 1.8);
+    }
+    c.stroke();
+    c.globalAlpha = 1;
   }
 
   /** The bonus square on the far court. */
@@ -1210,7 +1260,7 @@ export class TennisGame implements Scene {
       c.fillStyle = 'rgba(255,255,255,0.6)';
       c.font = '500 16px system-ui, sans-serif';
       c.fillText('Put the racket on the ring where the ball will arrive.', mx, my + 28);
-      c.fillText('The faster you swing, the faster the ball goes. Swing sideways to aim.', mx, my + 48);
+      c.fillText('Swing faster to hit harder. Hit early to go cross-court, late to go down the line.', mx, my + 48);
       c.fillText('Hit when the outer ring closes. Land in the gold square for a bonus.' + (this.best ? `  Best: ${this.best}` : ''), mx, my + 68);
     }
 

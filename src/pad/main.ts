@@ -98,13 +98,13 @@ function connect(): void {
         joined = true;
         gameOn = Boolean(m.gameOn);
         helloFor = '';
-        send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
+        sendCfg();
         sendPedals();
         break;
       case 'game':
         gameOn = Boolean(m.on);
         if (gameOn) {
-          send({ t: 'cfg', sens: Number(($('sens') as HTMLInputElement).value) });
+          sendCfg();
           sendPedals();
         }
         break;
@@ -370,7 +370,10 @@ bindPedal($('gasBtn'), 'gas');
 bindPedal($('brakeBtn'), 'brake');
 
 for (const b of document.querySelectorAll<HTMLButtonElement>('#homeCtl [data-game]')) {
-  b.addEventListener('click', () => send({ t: 'select', game: b.dataset.game }));
+  b.addEventListener('click', () => {
+    send({ t: 'select', game: b.dataset.game });
+    claimSettings();
+  });
 }
 for (const id of ['homeBtn', 'gamesBtn']) {
   $(id).addEventListener('click', () => send({ t: 'select', game: 'home' }));
@@ -378,6 +381,7 @@ for (const id of ['homeBtn', 'gamesBtn']) {
 
 function press(name: PadButton): void {
   send({ t: 'btn', name });
+  claimSettings();
   if ('vibrate' in navigator) navigator.vibrate(10);
 }
 
@@ -541,13 +545,40 @@ const showSens = () => {
 showSens();
 sens.addEventListener('input', () => {
   showSens();
-  send({ t: 'cfg', sens: Number(sens.value) });
+  sendCfg();
   try {
     localStorage.setItem('sens', sens.value);
   } catch {
     /* ignore */
   }
 });
+
+const lefty = $('lefty') as HTMLInputElement;
+try {
+  lefty.checked = localStorage.getItem('lefty') === '1';
+} catch {
+  /* ignore */
+}
+lefty.addEventListener('change', () => {
+  sendCfg();
+  try {
+    localStorage.setItem('lefty', lefty.checked ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+});
+
+function sendCfg(): void {
+  send({ t: 'cfg', sens: Number(sens.value), lefty: lefty.checked });
+}
+
+/**
+ * A button press or game pick makes this phone the controller, and the laptop only takes
+ * settings from the controller: send ours right after, so they apply from now on.
+ */
+function claimSettings(): void {
+  if (ctl !== pid) sendCfg();
+}
 
 // Jump meter: live accelerometer strength with a peak hold, so you can see what a jump looks like.
 function meterLoop(): void {

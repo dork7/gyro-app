@@ -180,6 +180,18 @@ button.small {
   font-size: 14px;
   color: var(--muted);
 }
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--muted);
+}
+.check input {
+  width: 22px;
+  height: 22px;
+  accent-color: #ff4d6d;
+}
 input[type='range'] {
   width: 100%;
   accent-color: #ff4d6d;

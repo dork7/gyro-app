@@ -6,6 +6,8 @@ export interface HostHandlers {
   onSample(s: SampleMsg): void;
   onButton(name: PadButton): void;
   onSensitivity(v: number): void;
+  /** The player holds the racket in the left hand (tennis). */
+  onLefty(lefty: boolean): void;
   onPedal(gas: boolean, brake: boolean): void;
   onSelect(game: GameId): void;
   onJump(strength: number): void;
@@ -114,6 +116,7 @@ export class HostConnection {
           break;
         case 'cfg':
           this.h.onSensitivity((m as unknown as { sens: number }).sens);
+          this.h.onLefty(Boolean((m as unknown as { lefty?: boolean }).lefty));
           break;
         case 'pedal':
           this.h.onPedal(Boolean((m as unknown as { gas: boolean }).gas), Boolean((m as unknown as { brake: boolean }).brake));
