@@ -41,7 +41,7 @@ export type UnoAction = 'hello' | 'start' | 'play' | 'draw' | 'pass';
 export type PadToGame =
   | SampleMsg
   | { t: 'btn'; name: PadButton }
-  | { t: 'cfg'; sens: number }
+  | { t: 'cfg'; sens: number; lefty?: boolean } // lefty: tennis aims the other way from the middle
   | { t: 'pedal'; gas: boolean; brake: boolean }
   | { t: 'select'; game: GameId }
   | { t: 'jump'; r: number } // r = take-off strength (ratio to gravity), 0 for a tap
